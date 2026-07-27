@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verificar un sobre firmado</title>
+<meta name="description" content="Comproba una salida firmada de agente sin confiar en quien la emitio. Corre entero en tu navegador, sin enviar nada a ningun servidor.">
+<style>
+  :root {
+    --fondo: #fbfbfa;      --panel: #fff;        --borde: #e3e2df;
+    --texto: #1a1a18;      --suave: #6b6a65;     --tenue: #93918a;
+    --ok: #1a7f4b;         --ok-fondo: #eaf6ef;
+    --mal: #b3261e;        --mal-fondo: #fdeceb;
+    --tibio: #8a6100;      --tibio-fondo: #fdf3e0;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fondo: #17171a;    --panel: #1f1f23;     --borde: #33333a;
+      --texto: #ececef;    --suave: #a3a2ab;     --tenue: #6f6e78;
+      --ok: #5fd394;       --ok-fondo: #14291f;
+      --mal: #ff6b61;      --mal-fondo: #2d1917;
+      --tibio: #e8b45c;    --tibio-fondo: #2b2415;
+    }
+  }
+  :root[data-theme="dark"] {
+    --fondo: #17171a;      --panel: #1f1f23;     --borde: #33333a;
+    --texto: #ececef;      --suave: #a3a2ab;     --tenue: #6f6e78;
+    --ok: #5fd394;         --ok-fondo: #14291f;
+    --mal: #ff6b61;        --mal-fondo: #2d1917;
+    --tibio: #e8b45c;      --tibio-fondo: #2b2415;
+  }
+  :root[data-theme="light"] {
+    --fondo: #fbfbfa;      --panel: #fff;        --borde: #e3e2df;
+    --texto: #1a1a18;      --suave: #6b6a65;     --tenue: #93918a;
+    --ok: #1a7f4b;         --ok-fondo: #eaf6ef;
+    --mal: #b3261e;        --mal-fondo: #fdeceb;
+    --tibio: #8a6100;      --tibio-fondo: #fdf3e0;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2.5rem 1.25rem 4rem;
+    background: var(--fondo); color: var(--texto);
+    font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 46rem; margin: 0 auto; }
+  h1 { font-size: 1.5rem; line-height: 1.25; margin: 0 0 .5rem; letter-spacing: -.015em; }
+  .sub { color: var(--suave); margin: 0 0 2rem; font-size: .95rem; }
+  .sub strong { color: var(--texto); font-weight: 600; }
+
+  #zona {
+    border: 1.5px dashed var(--borde); border-radius: 12px;
+    background: var(--panel); padding: 2.25rem 1.5rem; text-align: center;
+    cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  #zona:hover, #zona.encima { border-color: var(--texto); }
+  #zona.encima { background: var(--ok-fondo); }
+  #zona p { margin: 0; color: var(--suave); font-size: .95rem; }
+  #zona b { color: var(--texto); }
+  #zona small { display: block; margin-top: .5rem; color: var(--tenue); font-size: .8rem; }
+
+  #salida { margin-top: 1.75rem; }
+  #salida:empty { display: none; }
+
+  .veredicto {
+    border-radius: 12px; padding: 1.25rem 1.35rem; margin-bottom: 1.25rem;
+    border: 1px solid transparent;
+  }
+  .veredicto h2 { margin: 0 0 .35rem; font-size: 1.05rem; letter-spacing: .02em; }
+  .veredicto p  { margin: 0; font-size: .92rem; line-height: 1.55; }
+  .v-ok    { background: var(--ok-fondo);    border-color: var(--ok);    }
+  .v-ok h2 { color: var(--ok); }
+  .v-mal    { background: var(--mal-fondo);   border-color: var(--mal);   }
+  .v-mal h2 { color: var(--mal); }
+  .v-tibio    { background: var(--tibio-fondo); border-color: var(--tibio); }
+  .v-tibio h2 { color: var(--tibio); }
+
+  ul.checks { list-style: none; margin: 0; padding: 0;
+    border: 1px solid var(--borde); border-radius: 12px; overflow: hidden; background: var(--panel); }
+  ul.checks li { display: flex; gap: .8rem; align-items: flex-start;
+    padding: .8rem 1.1rem; border-top: 1px solid var(--borde); }
+  ul.checks li:first-child { border-top: 0; }
+  .marca { flex: none; width: 1.4rem; text-align: center; font-weight: 700; font-size: .95rem; line-height: 1.5; }
+  .m-ok { color: var(--ok); } .m-mal { color: var(--mal); } .m-falta { color: var(--tibio); }
+  .cuerpo { min-width: 0; }
+  .cuerpo code { font-family: var(--mono); font-size: .82rem; color: var(--texto); }
+  .cuerpo span { display: block; color: var(--suave); font-size: .85rem; margin-top: .1rem;
+    overflow-wrap: anywhere; }
+
+  details { margin-top: 1.5rem; border-top: 1px solid var(--borde); padding-top: 1.25rem; }
+  summary { cursor: pointer; color: var(--suave); font-size: .9rem; }
+  details h3 { font-size: .9rem; margin: 1.25rem 0 .4rem; }
+  details p, details li { font-size: .88rem; color: var(--suave); }
+  textarea {
+    width: 100%; min-height: 7rem; margin-top: .6rem; padding: .7rem;
+    font-family: var(--mono); font-size: .78rem; border-radius: 8px;
+    border: 1px solid var(--borde); background: var(--fondo); color: var(--texto); resize: vertical;
+  }
+  .pie { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--borde);
+    color: var(--tenue); font-size: .82rem; }
+  .pie code { font-family: var(--mono); overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Verificar un sobre firmado</h1>
+  <p class="sub">
+    Comprueba una salida de agente sin confiar en quien la emitió.
+    <strong>Corre entero en tu navegador</strong> — el archivo no se sube a ningún
+    lado y esta página no hace una sola petición de red.
+  </p>
+
+  <div id="zona" tabindex="0" role="button" aria-label="Soltar o elegir un archivo JSON">
+    <p><b>Soltá el JSON acá</b> o hacé clic para elegirlo</p>
+    <small>También podés pegarlo con Ctrl/Cmd+V</small>
+  </div>
+  <input type="file" id="archivo" accept=".json,application/json" hidden>
+
+  <div id="salida" aria-live="polite"></div>
+
+  <details>
+    <summary>Usar otra llave pública</summary>
+    <p>
+      Esta página trae embebida la llave de NomiCheck
+      (<code id="idllave"></code>). Para verificar un sobre de otro emisor, pegá
+      su llave pública en formato PEM.
+    </p>
+    <textarea id="pem" spellcheck="false" placeholder="-----BEGIN PUBLIC KEY-----&#10;...&#10;-----END PUBLIC KEY-----"></textarea>
+  </details>
+
+  <details>
+    <summary>Qué comprueba, y qué significa cada veredicto</summary>
+    <h3>Los tres veredictos</h3>
+    <ul>
+      <li><b>Verificable</b> — la firma es válida <em>y</em> el sobre dice contra
+        qué comprobarse. Se sostiene ante un tercero.</li>
+      <li><b>Firmado sin procedencia</b> — la firma es auténtica, pero falta el
+        hash del catálogo de reglas o la constancia de datos. Prueba
+        <em>quién lo dijo</em>, no que sea correcto. Es el estado más común y el
+        que más se confunde con «verificado».</li>
+      <li><b>Inválido</b> — la firma no verifica, falta, o es de otra llave.</li>
+    </ul>
+    <h3>Por qué se puede confiar en esta página</h3>
+    <p>
+      Todo el código está a la vista con «ver código fuente»: no hay scripts
+      externos, ni analítica, ni peticiones. La verificación usa
+      <code>crypto.subtle</code>, la criptografía del propio navegador. Podés
+      guardar el archivo y usarlo sin conexión.
+    </p>
+  </details>
+
+  <p class="pie">
+    Implementación en JavaScript de la especificación del sobre v1. Es la tercera
+    implementación independiente —junto a Ruby y TypeScript—, y esa es la
+    prueba de que el formato no depende de un lenguaje.
+  </p>
+</main>
+
+<script>
+"use strict";
+
+// La llave de produccion va embebida a proposito. Un verificador que necesita
+// llamar al servidor de quien firmo no es un verificador offline: si ese
+// servidor puede decidir que llave te entrega, puede decidir que te verifique.
+const PEM_EMBEBIDO = `-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEAaB5DJXNAqRHkZavTQ5EMe2Ng55GOgCJ7fIgBjKiWv2E=
+-----END PUBLIC KEY-----
+`;
+
+const enc = new TextEncoder();
+
+/* ── Forma canonica (spec §3) ──────────────────────────────────────────────
+   Se serializa a mano en vez de usar JSON.stringify sobre un objeto
+   reconstruido. Motivo: en JS las claves que parecen enteros ("0", "1") se
+   reordenan solas al frente sin importar en que orden las insertaste, asi que
+   un objeto con esas claves produciria bytes distintos a los de Ruby. */
+function compararUtf8(a, b) {
+  const A = enc.encode(a), B = enc.encode(b);
+  const n = Math.min(A.length, B.length);
+  for (let i = 0; i < n; i++) if (A[i] !== B[i]) return A[i] - B[i];
+  return A.length - B.length;
+}
+
+function serializar(v) {
+  if (v === null || v === undefined) return "null";
+  if (Array.isArray(v)) return "[" + v.map(serializar).join(",") + "]";
+  if (typeof v === "object") {
+    const claves = Object.keys(v)
+      .filter((k) => k !== "signature" && v[k] !== null && v[k] !== undefined)
+      .sort(compararUtf8);
+    return "{" + claves.map((k) => JSON.stringify(k) + ":" + serializar(v[k])).join(",") + "}";
+  }
+  return JSON.stringify(v);
+}
+
+/* ── Llave ─────────────────────────────────────────────────────────────── */
+function normalizarPem(pem) {
+  const cuerpo = pem.replace(/-----[A-Z ]+-----/g, "").replace(/\s+/g, "");
+  return "-----BEGIN PUBLIC KEY-----\n" +
+         (cuerpo.match(/.{1,64}/g) || []).join("\n") +
+         "\n-----END PUBLIC KEY-----\n";
+}
+
+async function idDeLlave(pem) {
+  const h = await crypto.subtle.digest("SHA-256", enc.encode(normalizarPem(pem)));
+  return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 32);
+}
+
+function pemADer(pem) {
+  const b64 = pem.replace(/-----[A-Z ]+-----/g, "").replace(/\s+/g, "");
+  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+}
+
+function b64ABytes(b64) {
+  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+}
+
+async function importar(pem) {
+  return crypto.subtle.importKey("spki", pemADer(pem), { name: "Ed25519" }, false, ["verify"]);
+}
+
+async function verificaFirma(doc, llave) {
+  const valor = doc?.signature?.valor;
+  if (!valor) return false;
+  try {
+    return await crypto.subtle.verify("Ed25519", llave, b64ABytes(valor), enc.encode(serializar(doc)));
+  } catch { return false; }
+}
+
+// Muta el primer valor util. Sirve para probar que el verificador de verdad
+// esta comprobando: uno que acepta cualquier cosa se ve igual que uno bueno.
+function mutar(v) {
+  if (Array.isArray(v)) {
+    for (let i = 0; i < v.length; i++) {
+      const m = mutar(v[i]);
+      if (m !== undefined) { const c = v.slice(); c[i] = m; return c; }
+    }
+    return undefined;
+  }
+  if (v && typeof v === "object") {
+    for (const k of Object.keys(v)) {
+      if (k === "signature") continue;
+      const val = v[k];
+      if (typeof val === "number") return { ...v, [k]: val + 1 };
+      if (typeof val === "string" && val) return { ...v, [k]: val + "~" };
+      if (val && typeof val === "object") {
+        const m = mutar(val);
+        if (m !== undefined) return { ...v, [k]: m };
+      }
+    }
+  }
+  return undefined;
+}
+
+/* ── Analisis (spec §6) ────────────────────────────────────────────────── */
+async function analizar(doc, pem) {
+  const checks = [];
+  const add = (id, critico, ok, detalle) => checks.push({ id, critico, ok, detalle });
+  const sig = doc.signature || {};
+
+  add("firma_presente", true, !!sig.valor,
+      sig.valor ? `algo=${sig.algo || "?"}` : "el documento no trae firma");
+
+  let llave = null;
+  try { llave = await importar(pem); }
+  catch { add("llave_legible", true, false, "la llave publica no se pudo interpretar"); }
+
+  if (llave) {
+    const valida = await verificaFirma(doc, llave);
+    add("firma_verifica", true, valida,
+        valida ? "Ed25519 verifica sobre el JSON canonico" : "LA FIRMA NO VERIFICA");
+
+    const idReal = await idDeLlave(pem);
+    const coincide = !sig.publicKeyId || sig.publicKeyId === idReal;
+    add("llave_declarada", true, coincide,
+        coincide ? `publicKeyId ${idReal} coincide con la llave usada`
+                 : `el sobre dice ${sig.publicKeyId} pero verificaste con ${idReal}`);
+
+    if (valida) {
+      const alterado = mutar(doc);
+      const detecta = alterado ? !(await verificaFirma(alterado, llave)) : false;
+      add("detecta_manipulacion", true, detecta,
+          detecta ? "alterar un valor invalida la firma" : "LA FIRMA ACEPTA DATOS ALTERADOS");
+    }
+  }
+
+  const hash = doc.reglasHash || doc.reglas?.hash;
+  add("reglas_hash", false, !!hash,
+      hash ? `catalogo ${String(hash).slice(0, 16)}...`
+           : "sin reglasHash — no se sabe contra que metodo se comprueba");
+
+  const fecha = doc.reglasVerificadasAl || doc.verificadoAl;
+  let extra = "";
+  if (fecha) {
+    const d = Math.floor((Date.now() - Date.parse(fecha)) / 86400000);
+    if (Number.isFinite(d)) extra = ` (hace ${d} dias)`;
+  }
+  add("fecha_verificacion", false, !!fecha,
+      fecha ? `reglas verificadas al ${fecha}${extra}` : "sin fecha de verificacion de la normativa");
+
+  const hd = doc.habeasData || {};
+  const completo = "persistidoEnBd" in hd && "procesadoPorLlmExterno" in hd;
+  add("habeas_data", false, completo,
+      completo ? `persistidoEnBd=${hd.persistidoEnBd} llmExterno=${hd.procesadoPorLlmExterno}`
+               : "sin constancia de tratamiento de datos");
+
+  const veredicto = checks.some((c) => c.critico && !c.ok) ? "invalido"
+                  : checks.every((c) => c.ok) ? "verificable" : "firmado_sin_procedencia";
+  return { checks, veredicto };
+}
+
+/* ── Interfaz ──────────────────────────────────────────────────────────── */
+const TEXTOS = {
+  verificable: ["v-ok", "VERIFICABLE",
+    "La firma es válida y el sobre declara contra qué comprobarse. Esta salida se sostiene ante un tercero."],
+  firmado_sin_procedencia: ["v-tibio", "FIRMADO SIN PROCEDENCIA",
+    "La firma es auténtica, pero falta contra qué comprobarla. Prueba quién lo dijo, no que sea correcto."],
+  invalido: ["v-mal", "INVÁLIDO",
+    "No confiar en esta salida. Revisá los puntos marcados abajo."]
+};
+
+const $salida = document.getElementById("salida");
+const $zona = document.getElementById("zona");
+const $archivo = document.getElementById("archivo");
+const $pem = document.getElementById("pem");
+
+function pemActivo() {
+  const v = $pem.value.trim();
+  return v.includes("BEGIN") ? v + "\n" : PEM_EMBEBIDO;
+}
+
+function escapar(s) {
+  return String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+}
+
+function error(msg) {
+  $salida.innerHTML = `<div class="veredicto v-mal"><h2>NO SE PUDO LEER</h2><p>${escapar(msg)}</p></div>`;
+}
+
+async function procesar(texto, nombre) {
+  let doc;
+  try { doc = JSON.parse(texto); }
+  catch (e) { return error("El archivo no es JSON válido. " + e.message); }
+  if (!doc || typeof doc !== "object") return error("El contenido no es un objeto JSON.");
+
+  let res;
+  try { res = await analizar(doc, pemActivo()); }
+  catch (e) { return error("Error verificando: " + e.message); }
+
+  const [clase, titulo, desc] = TEXTOS[res.veredicto];
+  const filas = res.checks.map((c) => {
+    const marca = c.ok ? ["m-ok", "✓"] : c.critico ? ["m-mal", "✕"] : ["m-falta", "!"];
+    return `<li><div class="marca ${marca[0]}">${marca[1]}</div>
+      <div class="cuerpo"><code>${escapar(c.id)}</code><span>${escapar(c.detalle)}</span></div></li>`;
+  }).join("");
+
+  $salida.innerHTML =
+    `<div class="veredicto ${clase}"><h2>${titulo}</h2><p>${desc}</p></div>
+     <ul class="checks">${filas}</ul>
+     <p class="pie">Archivo: <code>${escapar(nombre || "(pegado)")}</code></p>`;
+}
+
+function leer(file) {
+  const r = new FileReader();
+  r.onload = () => procesar(r.result, file.name);
+  r.onerror = () => error("No se pudo leer el archivo.");
+  r.readAsText(file, "UTF-8");
+}
+
+$zona.addEventListener("click", () => $archivo.click());
+$zona.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $archivo.click(); }
+});
+$archivo.addEventListener("change", () => { if ($archivo.files[0]) leer($archivo.files[0]); });
+
+["dragenter", "dragover"].forEach((ev) =>
+  $zona.addEventListener(ev, (e) => { e.preventDefault(); $zona.classList.add("encima"); }));
+["dragleave", "drop"].forEach((ev) =>
+  $zona.addEventListener(ev, (e) => { e.preventDefault(); $zona.classList.remove("encima"); }));
+$zona.addEventListener("drop", (e) => { if (e.dataTransfer.files[0]) leer(e.dataTransfer.files[0]); });
+
+document.addEventListener("paste", (e) => {
+  const t = e.clipboardData.getData("text");
+  if (t && t.trim().startsWith("{")) procesar(t, null);
+});
+
+idDeLlave(PEM_EMBEBIDO).then((id) => { document.getElementById("idllave").textContent = id; });
+</script>
+</body>
+</html>

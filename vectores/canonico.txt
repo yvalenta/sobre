@@ -1,0 +1,1 @@
+{"habeasData":{"persistidoEnBd":false,"procesadoPorLlmExterno":false},"reglasHash":"ca49edf08c164c80a1a178a0ef12feb93e6418b2a73da9809546eb7bacce229f","reglasVerificadasAl":"2026-07-16","resultados":[{"externalId":"T-1","valor":1234567}],"version":"1"}

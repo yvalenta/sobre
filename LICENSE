@@ -1,0 +1,30 @@
+CC0 1.0 Universal — Dedicación al Dominio Público
+=================================================
+
+En la medida en que lo permita la ley, quien asoció una obra con esta
+dedicación ha dedicado la obra al dominio público, renunciando en todo el mundo
+a todos sus derechos sobre la obra bajo la ley de derechos de autor, incluidos
+todos los derechos conexos y afines.
+
+Podés copiar, modificar, distribuir y ejecutar esta obra, incluso con fines
+comerciales, sin pedir permiso y sin atribución.
+
+LA OBRA SE ENTREGA "TAL CUAL", SIN GARANTÍA DE NINGÚN TIPO.
+
+Texto legal completo:
+https://creativecommons.org/publicdomain/zero/1.0/legalcode
+
+
+Por qué CC0 y no MIT
+--------------------
+
+MIT exige conservar el aviso de copyright. Para una biblioteca eso no cuesta
+nada, pero esto es una **especificación**: quien la implemente en otro lenguaje
+va a copiar reglas de canonicalización y vectores de prueba dentro de su propio
+código, y ninguna cláusula debería hacerlo dudar.
+
+Un estándar con fricción de licencia no se adopta, y un formato de verificación
+que nadie adopta no verifica nada.
+
+La llave privada de `vectores/` está publicada a propósito, es solo para probar
+implementaciones, y no debe usarse jamás en producción.
