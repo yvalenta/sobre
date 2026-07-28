@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Verificar un sobre firmado</title>
-<meta name="description" content="Comproba una salida firmada de agente sin confiar en quien la emitio. Corre entero en tu navegador, sin enviar nada a ningun servidor.">
+<title>Verify a signed envelope</title>
+<meta name="description" id="meta-desc" content="Check a signed agent output without trusting whoever issued it. Runs entirely in your browser, sending nothing to any server.">
 <style>
   :root {
     --fondo: #fbfbfa;      --panel: #fff;        --borde: #e3e2df;
@@ -49,6 +49,26 @@
   h1 { font-size: 1.5rem; line-height: 1.25; margin: 0 0 .5rem; letter-spacing: -.015em; }
   .sub { color: var(--suave); margin: 0 0 2rem; font-size: .95rem; }
   .sub strong { color: var(--texto); font-weight: 600; }
+
+  /* Selector de idioma. Va arriba a la derecha del contenido y no encima: en
+     una columna centrada, `position:absolute` se cruza con el titulo apenas la
+     pantalla se angosta, y esta pagina se abre mucho desde el telefono. */
+  .idiomas {
+    display: flex; justify-content: flex-end; align-items: center;
+    gap: .25rem; margin-bottom: 1.25rem;
+  }
+  .idiomas button {
+    font: inherit; font-size: .78rem; letter-spacing: .04em; font-weight: 600;
+    padding: .3rem .6rem; cursor: pointer;
+    color: var(--tenue); background: transparent;
+    border: 1px solid var(--borde); border-radius: 7px;
+    transition: color .15s, border-color .15s, background .15s;
+  }
+  .idiomas button:hover { color: var(--texto); border-color: var(--texto); }
+  .idiomas button[aria-pressed="true"] {
+    color: var(--texto); background: var(--panel); border-color: var(--texto);
+  }
+  .idiomas button:focus-visible { outline: 2px solid var(--texto); outline-offset: 2px; }
 
   #zona {
     border: 1.5px dashed var(--borde); border-radius: 12px;
@@ -105,58 +125,41 @@
 </head>
 <body>
 <main>
-  <h1>Verificar un sobre firmado</h1>
-  <p class="sub">
-    Comprueba una salida de agente sin confiar en quien la emitió.
-    <strong>Corre entero en tu navegador</strong> — lo que verifiques no se sube a
-    ningún lado. Con <code>?url=</code> se descarga el documento indicado, y nada
-    más: la comprobación de la firma ocurre siempre acá.
-  </p>
+  <nav class="idiomas" aria-label="Language / Idioma">
+    <button type="button" id="lang-en" data-lang="en" lang="en" aria-pressed="true">EN</button>
+    <button type="button" id="lang-es" data-lang="es" lang="es" aria-pressed="false">ES</button>
+  </nav>
 
-  <div id="zona" tabindex="0" role="button" aria-label="Soltar o elegir un archivo JSON">
-    <p><b>Soltá el JSON acá</b> o hacé clic para elegirlo</p>
-    <small>También podés pegarlo con Ctrl/Cmd+V</small>
+  <h1 data-i18n="titulo">Verify a signed envelope</h1>
+  <p class="sub" data-i18n-html="sub"></p>
+
+  <div id="zona" tabindex="0" role="button" data-i18n-aria="zona_aria">
+    <p data-i18n-html="zona_1"></p>
+    <small data-i18n="zona_2"></small>
   </div>
   <input type="file" id="archivo" accept=".json,application/json" hidden>
 
   <div id="salida" aria-live="polite"></div>
 
   <details>
-    <summary>Usar otra llave pública</summary>
-    <p>
-      Esta página trae embebida la llave de NomiCheck
-      (<code id="idllave"></code>). Para verificar un sobre de otro emisor, pegá
-      su llave pública en formato PEM.
-    </p>
+    <summary data-i18n="llave_summary"></summary>
+    <p data-i18n-html="llave_texto"></p>
     <textarea id="pem" spellcheck="false" placeholder="-----BEGIN PUBLIC KEY-----&#10;...&#10;-----END PUBLIC KEY-----"></textarea>
   </details>
 
   <details>
-    <summary>Qué comprueba, y qué significa cada veredicto</summary>
-    <h3>Los tres veredictos</h3>
+    <summary data-i18n="ayuda_summary"></summary>
+    <h3 data-i18n="ayuda_h1"></h3>
     <ul>
-      <li><b>Verificable</b> — la firma es válida <em>y</em> el sobre dice contra
-        qué comprobarse. Se sostiene ante un tercero.</li>
-      <li><b>Firmado sin procedencia</b> — la firma es auténtica, pero falta el
-        hash del catálogo de reglas o la constancia de datos. Prueba
-        <em>quién lo dijo</em>, no que sea correcto. Es el estado más común y el
-        que más se confunde con «verificado».</li>
-      <li><b>Inválido</b> — la firma no verifica, falta, o es de otra llave.</li>
+      <li data-i18n-html="ayuda_v1"></li>
+      <li data-i18n-html="ayuda_v2"></li>
+      <li data-i18n-html="ayuda_v3"></li>
     </ul>
-    <h3>Por qué se puede confiar en esta página</h3>
-    <p>
-      Todo el código está a la vista con «ver código fuente»: no hay scripts
-      externos, ni analítica, ni peticiones. La verificación usa
-      <code>crypto.subtle</code>, la criptografía del propio navegador. Podés
-      guardar el archivo y usarlo sin conexión.
-    </p>
+    <h3 data-i18n="ayuda_h2"></h3>
+    <p data-i18n-html="ayuda_confianza"></p>
   </details>
 
-  <p class="pie">
-    Implementación en JavaScript de la especificación del sobre v1. Es la tercera
-    implementación independiente —junto a Ruby y TypeScript—, y esa es la
-    prueba de que el formato no depende de un lenguaje.
-  </p>
+  <p class="pie" data-i18n-html="pie"></p>
 </main>
 
 <script>
@@ -171,6 +174,200 @@ MCowBQYDK2VwAyEAaB5DJXNAqRHkZavTQ5EMe2Ng55GOgCJ7fIgBjKiWv2E=
 `;
 
 const enc = new TextEncoder();
+
+/* ── Idiomas ───────────────────────────────────────────────────────────────
+   Ingles por defecto, a proposito. El producto se ofrece a un mercado de
+   agentes cuyo idioma franco es el ingles, y una pagina que arranca en espanol
+   pone una barrera antes de la primera linea. El espanol no es la traduccion:
+   son las dos primarias, y por eso los textos viven juntos aca en vez de en un
+   archivo aparte — separarlos permitiria que uno derive del otro sin que se
+   note, que es exactamente lo que este proyecto no quiere.
+
+   Los `id` de los checks (firma_verifica, reglas_hash...) NO se traducen: son
+   identificadores de maquina, se citan en la spec y en el verificador de Ruby,
+   y traducirlos rompe la correspondencia entre las tres implementaciones. */
+const I18N = {
+  en: {
+    html_lang: "en",
+    doc_titulo: "Verify a signed envelope",
+    meta: "Check a signed agent output without trusting whoever issued it. Runs entirely in your browser, sending nothing to any server.",
+    titulo: "Verify a signed envelope",
+    sub: "Check an agent output without trusting whoever issued it. <strong>It runs entirely in your browser</strong> — nothing you verify is uploaded anywhere. With <code>?url=</code> the given document is downloaded, and nothing more: the signature check always happens here.",
+    zona_aria: "Drop or choose a JSON file",
+    zona_1: "<b>Drop the JSON here</b> or click to choose it",
+    zona_2: "You can also paste it with Ctrl/Cmd+V",
+    llave_summary: "Use a different public key",
+    llave_texto: "This page has NomiCheck's key embedded (<code id=\"idllave\"></code>). To verify an envelope from another issuer, paste their public key in PEM format.",
+    ayuda_summary: "What it checks, and what each verdict means",
+    ayuda_h1: "The three verdicts",
+    ayuda_v1: "<b>Verifiable</b> — the signature is valid <em>and</em> the envelope states what to check it against. It holds up to a third party.",
+    ayuda_v2: "<b>Signed without provenance</b> — the signature is authentic, but the rule-catalog hash or the data-handling record is missing. It proves <em>who said it</em>, not that it is correct. This is the most common state, and the one most often mistaken for “verified”.",
+    ayuda_v3: "<b>Invalid</b> — the signature does not verify, is missing, or belongs to another key.",
+    ayuda_h2: "Why you can trust this page",
+    ayuda_confianza: "All the code is in plain sight with “view source”: no external scripts, no analytics, no requests. Verification uses <code>crypto.subtle</code>, the browser's own cryptography. You can save this file and use it offline.",
+    pie: "JavaScript implementation of the envelope specification v1. It is the third independent implementation — alongside Ruby and TypeScript — and that is the proof that the format does not depend on one language.",
+
+    v_verificable_t: "VERIFIABLE",
+    v_verificable_d: "The signature is valid and the envelope declares what to check it against. This output holds up to a third party.",
+    v_firmado_t: "SIGNED WITHOUT PROVENANCE",
+    v_firmado_d: "The signature is authentic, but what to check it against is missing. It proves who said it, not that it is correct.",
+    v_invalido_t: "INVALID",
+    v_invalido_d: "Do not trust this output. Review the points flagged below.",
+
+    err_titulo: "COULD NOT READ",
+    err_json: "The file is not valid JSON. {msg}",
+    err_no_objeto: "The content is not a JSON object.",
+    err_verificando: "Error while verifying: {msg}",
+    err_archivo: "The file could not be read.",
+    err_url: "The URL is not valid, or is not http(s).",
+    err_http: "The server responded {code} {texto}.",
+    err_descarga: "Could not download. This is usually CORS: the origin server does not allow another site to read that URL. Try downloading the file and dropping it here. ({msg})",
+    err_json_url: "What was downloaded is not valid JSON. {msg}",
+    descargando: "Downloading…",
+    archivo: "File",
+    pegado: "(pasted)",
+
+    c_firma_presente_ok: "algo={algo}",
+    c_firma_presente_no: "the document carries no signature",
+    c_llave_legible_no: "the public key could not be parsed",
+    c_firma_verifica_ok: "Ed25519 verifies over the canonical JSON",
+    c_firma_verifica_no: "THE SIGNATURE DOES NOT VERIFY",
+    c_llave_declarada_ok: "publicKeyId {id} matches the key used",
+    c_llave_declarada_no: "the envelope says {declarado} but you verified with {real}",
+    c_detecta_ok: "altering a value invalidates the signature",
+    c_detecta_no: "THE SIGNATURE ACCEPTS ALTERED DATA",
+    c_reglas_ok: "catalog {hash}…",
+    c_reglas_no: "no reglasHash — there is no way to know what method it is checked against",
+    c_fecha_ok: "rules verified as of {fecha}{extra}",
+    c_fecha_no: "no verification date for the regulations",
+    c_dias: " ({n} days ago)",
+    c_habeas_ok: "persistidoEnBd={bd} llmExterno={llm}",
+    c_habeas_no: "no record of data handling"
+  },
+
+  es: {
+    html_lang: "es",
+    doc_titulo: "Verificar un sobre firmado",
+    meta: "Comprobá una salida firmada de agente sin confiar en quien la emitió. Corre entero en tu navegador, sin enviar nada a ningún servidor.",
+    titulo: "Verificar un sobre firmado",
+    sub: "Comprueba una salida de agente sin confiar en quien la emitió. <strong>Corre entero en tu navegador</strong> — lo que verifiques no se sube a ningún lado. Con <code>?url=</code> se descarga el documento indicado, y nada más: la comprobación de la firma ocurre siempre acá.",
+    zona_aria: "Soltar o elegir un archivo JSON",
+    zona_1: "<b>Soltá el JSON acá</b> o hacé clic para elegirlo",
+    zona_2: "También podés pegarlo con Ctrl/Cmd+V",
+    llave_summary: "Usar otra llave pública",
+    llave_texto: "Esta página trae embebida la llave de NomiCheck (<code id=\"idllave\"></code>). Para verificar un sobre de otro emisor, pegá su llave pública en formato PEM.",
+    ayuda_summary: "Qué comprueba, y qué significa cada veredicto",
+    ayuda_h1: "Los tres veredictos",
+    ayuda_v1: "<b>Verificable</b> — la firma es válida <em>y</em> el sobre dice contra qué comprobarse. Se sostiene ante un tercero.",
+    ayuda_v2: "<b>Firmado sin procedencia</b> — la firma es auténtica, pero falta el hash del catálogo de reglas o la constancia de datos. Prueba <em>quién lo dijo</em>, no que sea correcto. Es el estado más común y el que más se confunde con «verificado».",
+    ayuda_v3: "<b>Inválido</b> — la firma no verifica, falta, o es de otra llave.",
+    ayuda_h2: "Por qué se puede confiar en esta página",
+    ayuda_confianza: "Todo el código está a la vista con «ver código fuente»: no hay scripts externos, ni analítica, ni peticiones. La verificación usa <code>crypto.subtle</code>, la criptografía del propio navegador. Podés guardar el archivo y usarlo sin conexión.",
+    pie: "Implementación en JavaScript de la especificación del sobre v1. Es la tercera implementación independiente —junto a Ruby y TypeScript—, y esa es la prueba de que el formato no depende de un lenguaje.",
+
+    v_verificable_t: "VERIFICABLE",
+    v_verificable_d: "La firma es válida y el sobre declara contra qué comprobarse. Esta salida se sostiene ante un tercero.",
+    v_firmado_t: "FIRMADO SIN PROCEDENCIA",
+    v_firmado_d: "La firma es auténtica, pero falta contra qué comprobarla. Prueba quién lo dijo, no que sea correcto.",
+    v_invalido_t: "INVÁLIDO",
+    v_invalido_d: "No confiar en esta salida. Revisá los puntos marcados abajo.",
+
+    err_titulo: "NO SE PUDO LEER",
+    err_json: "El archivo no es JSON válido. {msg}",
+    err_no_objeto: "El contenido no es un objeto JSON.",
+    err_verificando: "Error verificando: {msg}",
+    err_archivo: "No se pudo leer el archivo.",
+    err_url: "La URL no es válida, o no es http(s).",
+    err_http: "El servidor respondió {code} {texto}.",
+    err_descarga: "No se pudo descargar. Suele ser CORS: el servidor de origen no permite que otro sitio lea esa URL. Probá bajando el archivo y soltándolo acá. ({msg})",
+    err_json_url: "Lo descargado no es JSON válido. {msg}",
+    descargando: "Descargando…",
+    archivo: "Archivo",
+    pegado: "(pegado)",
+
+    c_firma_presente_ok: "algo={algo}",
+    c_firma_presente_no: "el documento no trae firma",
+    c_llave_legible_no: "la llave pública no se pudo interpretar",
+    c_firma_verifica_ok: "Ed25519 verifica sobre el JSON canónico",
+    c_firma_verifica_no: "LA FIRMA NO VERIFICA",
+    c_llave_declarada_ok: "publicKeyId {id} coincide con la llave usada",
+    c_llave_declarada_no: "el sobre dice {declarado} pero verificaste con {real}",
+    c_detecta_ok: "alterar un valor invalida la firma",
+    c_detecta_no: "LA FIRMA ACEPTA DATOS ALTERADOS",
+    c_reglas_ok: "catálogo {hash}…",
+    c_reglas_no: "sin reglasHash — no se sabe contra qué método se comprueba",
+    c_fecha_ok: "reglas verificadas al {fecha}{extra}",
+    c_fecha_no: "sin fecha de verificación de la normativa",
+    c_dias: " (hace {n} días)",
+    c_habeas_ok: "persistidoEnBd={bd} llmExterno={llm}",
+    c_habeas_no: "sin constancia de tratamiento de datos"
+  }
+};
+
+const IDIOMAS = Object.keys(I18N);
+const CLAVE_GUARDADA = "sobre.idioma";
+
+/** Ingles por defecto. Solo lo cambia una eleccion EXPLICITA: `?lang=` o lo que
+    el usuario haya elegido antes. No se mira `navigator.language` a proposito —
+    el idioma de vitrina es una decision de producto, no del navegador. */
+function idiomaInicial() {
+  const q = new URLSearchParams(location.search).get("lang");
+  if (q && IDIOMAS.includes(q.toLowerCase())) return q.toLowerCase();
+  try {
+    const g = localStorage.getItem(CLAVE_GUARDADA);
+    if (g && IDIOMAS.includes(g)) return g;
+  } catch { /* localStorage puede estar bloqueado; el default alcanza */ }
+  return "en";
+}
+
+let idioma = idiomaInicial();
+
+/** Busca la clave y sustituye {marcadores}. Si falta, cae al ingles y despues
+    a la clave cruda: una pagina con una etiqueta sin traducir es incomoda, una
+    con `undefined` parece rota. */
+function t(clave, params) {
+  let s = I18N[idioma][clave];
+  if (s === undefined) s = I18N.en[clave];
+  if (s === undefined) return clave;
+  if (!params) return s;
+  return s.replace(/\{(\w+)\}/g, (_, k) => (params[k] === undefined ? "" : String(params[k])));
+}
+
+function aplicarIdioma() {
+  document.documentElement.lang = t("html_lang");
+  document.title = t("doc_titulo");
+  const md = document.getElementById("meta-desc");
+  if (md) md.setAttribute("content", t("meta"));
+
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll("[data-i18n-html]").forEach((el) => {
+    el.innerHTML = t(el.dataset.i18nHtml);
+  });
+  document.querySelectorAll("[data-i18n-aria]").forEach((el) => {
+    el.setAttribute("aria-label", t(el.dataset.i18nAria));
+  });
+
+  document.querySelectorAll(".idiomas button").forEach((b) => {
+    b.setAttribute("aria-pressed", String(b.dataset.lang === idioma));
+  });
+
+  // `llave_texto` se re-inyecta con innerHTML, asi que el <code id="idllave">
+  // que estaba adentro se pierde en cada cambio de idioma. Se vuelve a llenar.
+  pintarIdLlave();
+  // Y si ya habia un veredicto en pantalla, se vuelve a dibujar traducido: un
+  // resultado que se queda en el idioma anterior es peor que no traducir nada,
+  // porque parece que la pagina se rompio a la mitad.
+  repintarSalida();
+}
+
+function cambiarIdioma(nuevo) {
+  if (!IDIOMAS.includes(nuevo) || nuevo === idioma) return;
+  idioma = nuevo;
+  try { localStorage.setItem(CLAVE_GUARDADA, nuevo); } catch { /* modo privado */ }
+  aplicarIdioma();
+}
 
 /* ── Forma canonica (spec §3) ──────────────────────────────────────────────
    Se serializa a mano en vez de usar JSON.stringify sobre un objeto
@@ -255,57 +452,65 @@ function mutar(v) {
   return undefined;
 }
 
-/* ── Analisis (spec §6) ────────────────────────────────────────────────── */
+/* ── Analisis (spec §6) ──────────────────────────────────────────────────
+   Cada check guarda una CLAVE y sus parametros, no un texto ya armado. Es lo
+   que permite cambiar de idioma con un veredicto en pantalla sin re-verificar
+   nada: la criptografia se corre una vez y el texto se pinta cuantas veces
+   haga falta. Tambien evita el error tipico de i18n a medias, que es traducir
+   la interfaz y dejar el resultado —lo unico que la gente lee— en el idioma
+   del que lo programo. */
 async function analizar(doc, pem) {
   const checks = [];
-  const add = (id, critico, ok, detalle) => checks.push({ id, critico, ok, detalle });
+  const add = (id, critico, ok, clave, params) => checks.push({ id, critico, ok, clave, params });
   const sig = doc.signature || {};
 
   add("firma_presente", true, !!sig.valor,
-      sig.valor ? `algo=${sig.algo || "?"}` : "el documento no trae firma");
+      sig.valor ? "c_firma_presente_ok" : "c_firma_presente_no",
+      { algo: sig.algo || "?" });
 
   let llave = null;
   try { llave = await importar(pem); }
-  catch { add("llave_legible", true, false, "la llave publica no se pudo interpretar"); }
+  catch { add("llave_legible", true, false, "c_llave_legible_no"); }
 
   if (llave) {
     const valida = await verificaFirma(doc, llave);
     add("firma_verifica", true, valida,
-        valida ? "Ed25519 verifica sobre el JSON canonico" : "LA FIRMA NO VERIFICA");
+        valida ? "c_firma_verifica_ok" : "c_firma_verifica_no");
 
     const idReal = await idDeLlave(pem);
     const coincide = !sig.publicKeyId || sig.publicKeyId === idReal;
     add("llave_declarada", true, coincide,
-        coincide ? `publicKeyId ${idReal} coincide con la llave usada`
-                 : `el sobre dice ${sig.publicKeyId} pero verificaste con ${idReal}`);
+        coincide ? "c_llave_declarada_ok" : "c_llave_declarada_no",
+        { id: idReal, real: idReal, declarado: sig.publicKeyId });
 
     if (valida) {
       const alterado = mutar(doc);
       const detecta = alterado ? !(await verificaFirma(alterado, llave)) : false;
       add("detecta_manipulacion", true, detecta,
-          detecta ? "alterar un valor invalida la firma" : "LA FIRMA ACEPTA DATOS ALTERADOS");
+          detecta ? "c_detecta_ok" : "c_detecta_no");
     }
   }
 
   const hash = doc.reglasHash || doc.reglas?.hash;
   add("reglas_hash", false, !!hash,
-      hash ? `catalogo ${String(hash).slice(0, 16)}...`
-           : "sin reglasHash — no se sabe contra que metodo se comprueba");
+      hash ? "c_reglas_ok" : "c_reglas_no",
+      { hash: String(hash || "").slice(0, 16) });
 
   const fecha = doc.reglasVerificadasAl || doc.verificadoAl;
-  let extra = "";
+  let dias = null;
   if (fecha) {
     const d = Math.floor((Date.now() - Date.parse(fecha)) / 86400000);
-    if (Number.isFinite(d)) extra = ` (hace ${d} dias)`;
+    if (Number.isFinite(d)) dias = d;
   }
   add("fecha_verificacion", false, !!fecha,
-      fecha ? `reglas verificadas al ${fecha}${extra}` : "sin fecha de verificacion de la normativa");
+      fecha ? "c_fecha_ok" : "c_fecha_no",
+      { fecha, dias });
 
   const hd = doc.habeasData || {};
   const completo = "persistidoEnBd" in hd && "procesadoPorLlmExterno" in hd;
   add("habeas_data", false, completo,
-      completo ? `persistidoEnBd=${hd.persistidoEnBd} llmExterno=${hd.procesadoPorLlmExterno}`
-               : "sin constancia de tratamiento de datos");
+      completo ? "c_habeas_ok" : "c_habeas_no",
+      { bd: hd.persistidoEnBd, llm: hd.procesadoPorLlmExterno });
 
   const veredicto = checks.some((c) => c.critico && !c.ok) ? "invalido"
                   : checks.every((c) => c.ok) ? "verificable" : "firmado_sin_procedencia";
@@ -313,19 +518,19 @@ async function analizar(doc, pem) {
 }
 
 /* ── Interfaz ──────────────────────────────────────────────────────────── */
-const TEXTOS = {
-  verificable: ["v-ok", "VERIFICABLE",
-    "La firma es válida y el sobre declara contra qué comprobarse. Esta salida se sostiene ante un tercero."],
-  firmado_sin_procedencia: ["v-tibio", "FIRMADO SIN PROCEDENCIA",
-    "La firma es auténtica, pero falta contra qué comprobarla. Prueba quién lo dijo, no que sea correcto."],
-  invalido: ["v-mal", "INVÁLIDO",
-    "No confiar en esta salida. Revisá los puntos marcados abajo."]
+const VEREDICTOS = {
+  verificable: ["v-ok", "v_verificable_t", "v_verificable_d"],
+  firmado_sin_procedencia: ["v-tibio", "v_firmado_t", "v_firmado_d"],
+  invalido: ["v-mal", "v_invalido_t", "v_invalido_d"]
 };
 
 const $salida = document.getElementById("salida");
 const $zona = document.getElementById("zona");
 const $archivo = document.getElementById("archivo");
 const $pem = document.getElementById("pem");
+
+// Lo ultimo que se mostro, para poder repintarlo en el otro idioma.
+let ultimo = null;
 
 function pemActivo() {
   const v = $pem.value.trim();
@@ -336,37 +541,68 @@ function escapar(s) {
   return String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 }
 
-function error(msg) {
-  $salida.innerHTML = `<div class="veredicto v-mal"><h2>NO SE PUDO LEER</h2><p>${escapar(msg)}</p></div>`;
+function pintarIdLlave() {
+  const el = document.getElementById("idllave");
+  if (!el) return;
+  idDeLlave(PEM_EMBEBIDO).then((id) => {
+    const ahora = document.getElementById("idllave");
+    if (ahora) ahora.textContent = id;
+  });
+}
+
+function detalleDe(c) {
+  const p = { ...(c.params || {}) };
+  if (c.clave === "c_fecha_ok") {
+    p.extra = p.dias === null || p.dias === undefined ? "" : t("c_dias", { n: p.dias });
+  }
+  return t(c.clave, p);
+}
+
+function repintarSalida() {
+  if (!ultimo) return;
+  if (ultimo.tipo === "error") return pintarError(ultimo.clave, ultimo.params);
+  pintarResultado(ultimo.res, ultimo.nombre);
+}
+
+function pintarError(clave, params) {
+  ultimo = { tipo: "error", clave, params };
+  $salida.innerHTML =
+    `<div class="veredicto v-mal"><h2>${escapar(t("err_titulo"))}</h2>` +
+    `<p>${escapar(t(clave, params))}</p></div>`;
+}
+
+function pintarResultado(res, nombre) {
+  ultimo = { tipo: "resultado", res, nombre };
+  const [clase, claveTitulo, claveDesc] = VEREDICTOS[res.veredicto];
+  const filas = res.checks.map((c) => {
+    const marca = c.ok ? ["m-ok", "✓"] : c.critico ? ["m-mal", "✕"] : ["m-falta", "!"];
+    return `<li><div class="marca ${marca[0]}">${marca[1]}</div>
+      <div class="cuerpo"><code>${escapar(c.id)}</code><span>${escapar(detalleDe(c))}</span></div></li>`;
+  }).join("");
+
+  $salida.innerHTML =
+    `<div class="veredicto ${clase}"><h2>${escapar(t(claveTitulo))}</h2><p>${escapar(t(claveDesc))}</p></div>
+     <ul class="checks">${filas}</ul>
+     <p class="pie">${escapar(t("archivo"))}: <code>${escapar(nombre || t("pegado"))}</code></p>`;
 }
 
 async function procesar(texto, nombre) {
   let doc;
   try { doc = JSON.parse(texto); }
-  catch (e) { return error("El archivo no es JSON válido. " + e.message); }
-  if (!doc || typeof doc !== "object") return error("El contenido no es un objeto JSON.");
+  catch (e) { return pintarError("err_json", { msg: e.message }); }
+  if (!doc || typeof doc !== "object") return pintarError("err_no_objeto");
 
   let res;
   try { res = await analizar(doc, pemActivo()); }
-  catch (e) { return error("Error verificando: " + e.message); }
+  catch (e) { return pintarError("err_verificando", { msg: e.message }); }
 
-  const [clase, titulo, desc] = TEXTOS[res.veredicto];
-  const filas = res.checks.map((c) => {
-    const marca = c.ok ? ["m-ok", "✓"] : c.critico ? ["m-mal", "✕"] : ["m-falta", "!"];
-    return `<li><div class="marca ${marca[0]}">${marca[1]}</div>
-      <div class="cuerpo"><code>${escapar(c.id)}</code><span>${escapar(c.detalle)}</span></div></li>`;
-  }).join("");
-
-  $salida.innerHTML =
-    `<div class="veredicto ${clase}"><h2>${titulo}</h2><p>${desc}</p></div>
-     <ul class="checks">${filas}</ul>
-     <p class="pie">Archivo: <code>${escapar(nombre || "(pegado)")}</code></p>`;
+  pintarResultado(res, nombre);
 }
 
 function leer(file) {
   const r = new FileReader();
   r.onload = () => procesar(r.result, file.name);
-  r.onerror = () => error("No se pudo leer el archivo.");
+  r.onerror = () => pintarError("err_archivo");
   r.readAsText(file, "UTF-8");
 }
 
@@ -408,33 +644,34 @@ function extraerSobre(doc) {
 
 async function desdeUrl(crudo) {
   const u = urlSegura(crudo);
-  if (!u) return error("La URL no es válida, o no es http(s).");
+  if (!u) return pintarError("err_url");
 
+  ultimo = null;
   $salida.innerHTML =
-    `<div class="veredicto"><h2>Descargando…</h2><p><code>${escapar(u.href)}</code></p></div>`;
+    `<div class="veredicto"><h2>${escapar(t("descargando"))}</h2><p><code>${escapar(u.href)}</code></p></div>`;
 
   let texto;
   try {
     const r = await fetch(u.href, { headers: { accept: "application/json" } });
-    if (!r.ok) return error(`El servidor respondió ${r.status} ${r.statusText}.`);
+    if (!r.ok) return pintarError("err_http", { code: r.status, texto: r.statusText });
     texto = await r.text();
   } catch (e) {
     // Casi siempre es CORS: el emisor tiene que servir la llave y el documento
     // con Access-Control-Allow-Origin para que un verificador ajeno los lea.
-    return error(
-      "No se pudo descargar. Suele ser CORS: el servidor de origen no permite " +
-      "que otro sitio lea esa URL. Probá bajando el archivo y soltándolo acá. (" +
-      escapar(e.message) + ")",
-    );
+    return pintarError("err_descarga", { msg: e.message });
   }
 
   let doc;
   try { doc = JSON.parse(texto); }
-  catch (e) { return error("Lo descargado no es JSON válido. " + e.message); }
+  catch (e) { return pintarError("err_json_url", { msg: e.message }); }
 
   const { doc: sobre, campo } = extraerSobre(doc);
   await procesar(JSON.stringify(sobre), u.href + (campo ? ` → .${campo}` : ""));
 }
+
+document.querySelectorAll(".idiomas button").forEach((b) => {
+  b.addEventListener("click", () => cambiarIdioma(b.dataset.lang));
+});
 
 $zona.addEventListener("click", () => $archivo.click());
 $zona.addEventListener("keydown", (e) => {
@@ -449,11 +686,11 @@ $archivo.addEventListener("change", () => { if ($archivo.files[0]) leer($archivo
 $zona.addEventListener("drop", (e) => { if (e.dataTransfer.files[0]) leer(e.dataTransfer.files[0]); });
 
 document.addEventListener("paste", (e) => {
-  const t = e.clipboardData.getData("text");
-  if (t && t.trim().startsWith("{")) procesar(t, null);
+  const t2 = e.clipboardData.getData("text");
+  if (t2 && t2.trim().startsWith("{")) procesar(t2, null);
 });
 
-idDeLlave(PEM_EMBEBIDO).then((id) => { document.getElementById("idllave").textContent = id; });
+aplicarIdioma();
 
 // Arranque: `?url=` verifica solo, sin que nadie toque nada.
 //
