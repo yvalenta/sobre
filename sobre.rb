@@ -20,9 +20,9 @@
 # Esta es ademas la implementacion de referencia: `probe.rb` la usa, de modo que
 # la canonicalizacion vive en un solo lugar y no puede derivar entre las dos.
 #
-#   ruby scripts/sobre.rb verificar <sobre.json> --llave-url https://host/publickey
-#   ruby scripts/sobre.rb verificar <sobre.json> --llave llave.pem
-#   ruby scripts/sobre.rb llave-id llave.pem
+#   ruby sobre.rb verificar <sobre.json> --llave-url https://host/publickey
+#   ruby sobre.rb verificar <sobre.json> --llave llave.pem
+#   ruby sobre.rb llave-id llave.pem
 #
 # Salida: 0 verificable · 1 firma invalida · 2 firma valida, sobre incompleto
 
