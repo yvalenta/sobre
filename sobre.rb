@@ -59,8 +59,17 @@ module Sobre
   # secas revienta con "invalid byte sequence" en cualquier maquina cuyo locale
   # no sea UTF-8 — y el sobre suele traer tildes. Es la primera piedra con la
   # que tropieza quien lo usa como libreria.
+  # `-` lee de la entrada estandar, para que el sobre se pueda verificar en una
+  # tuberia sin tocar el disco:
+  #
+  #   curl -s https://host/ejemplo | jq .output | ruby sobre.rb verificar -
+  #
+  # Importa mas de lo que parece: un comprador que quiera comprobarnos ANTES de
+  # pagar no deberia tener que guardar un archivo para hacerlo, y un agente que
+  # verifica en automatico no tiene por que escribir en disco.
   def self.cargar(ruta)
-    JSON.parse(File.read(ruta, encoding: "UTF-8"))
+    crudo = ruta == "-" ? $stdin.read : File.read(ruta, encoding: "UTF-8")
+    JSON.parse(crudo.force_encoding("UTF-8"))
   end
 
   # Reescribe un PEM a su forma estandar: base64 en lineas de 64, un solo salto
@@ -210,6 +219,11 @@ if __FILE__ == $PROGRAM_NAME
         ruby sobre.rb verificar <sobre.json> [--llave a.pem | --llave-url URL] [--json]
         ruby sobre.rb llave-id <llave.pem>
 
+      `-` en vez del archivo lee de la entrada estandar:
+
+        curl -s https://host/ejemplo | jq .output |
+          ruby sobre.rb verificar - --llave-url https://host/publickey --json
+
       Salida: 0 verificable · 1 firma invalida · 2 firmado sin procedencia
     TXT
     exit 64
@@ -243,10 +257,12 @@ if __FILE__ == $PROGRAM_NAME
     checks = Sobre.analizar(doc, pkey, pem)
     veredicto = Sobre.veredicto(checks)
 
+    nombre = archivo == "-" ? "(entrada estandar)" : archivo
+
     if salida_json
-      puts JSON.pretty_generate({ archivo: archivo, veredicto: veredicto, checks: checks })
+      puts JSON.pretty_generate({ archivo: nombre, veredicto: veredicto, checks: checks })
     else
-      puts "sobre: #{archivo}"
+      puts "sobre: #{nombre}"
       puts
       ancho = checks.map { |c| c[:id].length }.max
       checks.each do |c|

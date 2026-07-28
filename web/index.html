@@ -108,8 +108,9 @@
   <h1>Verificar un sobre firmado</h1>
   <p class="sub">
     Comprueba una salida de agente sin confiar en quien la emitió.
-    <strong>Corre entero en tu navegador</strong> — el archivo no se sube a ningún
-    lado y esta página no hace una sola petición de red.
+    <strong>Corre entero en tu navegador</strong> — lo que verifiques no se sube a
+    ningún lado. Con <code>?url=</code> se descarga el documento indicado, y nada
+    más: la comprobación de la firma ocurre siempre acá.
   </p>
 
   <div id="zona" tabindex="0" role="button" aria-label="Soltar o elegir un archivo JSON">
@@ -369,6 +370,72 @@ function leer(file) {
   r.readAsText(file, "UTF-8");
 }
 
+// ── Verificar desde una URL: ?url=https://host/algo.json ────────────────────
+//
+// Existe para que comprobar sea UN CLIC. Sin esto, quien quiera verificar un
+// sobre antes de confiar en el emisor tiene que bajar el JSON y arrastrarlo,
+// y ese paso de más es donde se pierde a la gente.
+//
+// La verificación sigue ocurriendo entera en este navegador: se descarga el
+// documento y se comprueba su firma acá. La URL no se manda a ningún lado.
+
+/** Solo http(s). Corta `javascript:`, `data:` y `file:` de raíz. */
+function urlSegura(crudo) {
+  let u;
+  try { u = new URL(crudo, location.href); } catch { return null; }
+  return (u.protocol === "https:" || u.protocol === "http:") ? u : null;
+}
+
+/**
+ * Saca el sobre de lo que haya devuelto el servidor.
+ *
+ * Un endpoint de ejemplo suele responder un envoltorio didáctico
+ * (`{instrucciones, input, output}`) y el sobre real está en `output`. Sin
+ * esto, el caso de uso más obvio —pegar la URL del ejemplo público— daría
+ * "no tiene firma" sobre un documento que sí la tiene.
+ */
+function extraerSobre(doc) {
+  if (doc && typeof doc === "object" && !doc.signature) {
+    for (const campo of ["output", "sobre", "resultado"]) {
+      const dentro = doc[campo];
+      if (dentro && typeof dentro === "object" && dentro.signature) {
+        return { doc: dentro, campo };
+      }
+    }
+  }
+  return { doc, campo: null };
+}
+
+async function desdeUrl(crudo) {
+  const u = urlSegura(crudo);
+  if (!u) return error("La URL no es válida, o no es http(s).");
+
+  $salida.innerHTML =
+    `<div class="veredicto"><h2>Descargando…</h2><p><code>${escapar(u.href)}</code></p></div>`;
+
+  let texto;
+  try {
+    const r = await fetch(u.href, { headers: { accept: "application/json" } });
+    if (!r.ok) return error(`El servidor respondió ${r.status} ${r.statusText}.`);
+    texto = await r.text();
+  } catch (e) {
+    // Casi siempre es CORS: el emisor tiene que servir la llave y el documento
+    // con Access-Control-Allow-Origin para que un verificador ajeno los lea.
+    return error(
+      "No se pudo descargar. Suele ser CORS: el servidor de origen no permite " +
+      "que otro sitio lea esa URL. Probá bajando el archivo y soltándolo acá. (" +
+      escapar(e.message) + ")",
+    );
+  }
+
+  let doc;
+  try { doc = JSON.parse(texto); }
+  catch (e) { return error("Lo descargado no es JSON válido. " + e.message); }
+
+  const { doc: sobre, campo } = extraerSobre(doc);
+  await procesar(JSON.stringify(sobre), u.href + (campo ? ` → .${campo}` : ""));
+}
+
 $zona.addEventListener("click", () => $archivo.click());
 $zona.addEventListener("keydown", (e) => {
   if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $archivo.click(); }
@@ -387,6 +454,31 @@ document.addEventListener("paste", (e) => {
 });
 
 idDeLlave(PEM_EMBEBIDO).then((id) => { document.getElementById("idllave").textContent = id; });
+
+// Arranque: `?url=` verifica solo, sin que nadie toque nada.
+//
+//   /verificar?url=https://host/api/batch/verificar/ejemplo
+//
+// `?llave-url=` permite además traer la llave pública del emisor, para
+// comprobar sobres que no son nuestros — que es el caso que hace del sobre un
+// formato y no una marca.
+(async function arranque() {
+  const q = new URLSearchParams(location.search);
+  const url = q.get("url");
+  if (!url) return;
+
+  const llaveUrl = q.get("llave-url");
+  if (llaveUrl) {
+    const u = urlSegura(llaveUrl);
+    if (u) {
+      try {
+        const r = await fetch(u.href);
+        if (r.ok) document.getElementById("pem").value = (await r.text()).trim();
+      } catch { /* si falla se sigue con la llave embebida; el veredicto lo dirá */ }
+    }
+  }
+  desdeUrl(url);
+})();
 </script>
 </body>
 </html>

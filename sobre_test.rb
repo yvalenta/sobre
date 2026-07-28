@@ -210,6 +210,48 @@ prueba("la llave privada de pruebas reproduce esa firma exacta") do
   Base64.strict_encode64(sk.sign(nil, bytes)) == doc["signature"]["valor"]
 end
 
+# ── Entrada estandar: verificar en una tuberia, sin tocar el disco ───────────
+
+prueba("`-` lee de la entrada estandar y da el mismo documento que el archivo") do
+  ruta = File.join(VEC, "sobre.json")
+  esperado = Sobre.cargar(ruta)
+  leido = nil
+  IO.pipe do |r, w|
+    w.write(File.read(ruta, encoding: "UTF-8"))
+    w.close
+    original = $stdin
+    $stdin = r
+    begin
+      leido = Sobre.cargar("-")
+    ensure
+      $stdin = original
+    end
+  end
+  leido == esperado
+end
+
+prueba("un sobre con tildes sobrevive a la tuberia sin romper la firma") do
+  # El locale de la maquina puede dar US-ASCII, y entonces `$stdin.read` marca
+  # los bytes con esa codificacion. Un JSON con tildes canonicaliza distinto y
+  # la firma deja de verificar — sin error visible, solo un veredicto falso.
+  ruta = File.join(VEC, "sobre.json")
+  pem = File.read(File.join(VEC, "llave-publica.pem"))
+  leido = nil
+  IO.pipe do |r, w|
+    w.write(File.read(ruta, encoding: "UTF-8"))
+    w.close
+    r.set_encoding("US-ASCII")
+    original = $stdin
+    $stdin = r
+    begin
+      leido = Sobre.cargar("-")
+    ensure
+      $stdin = original
+    end
+  end
+  Sobre.veredicto(Sobre.analizar(leido, OpenSSL::PKey.read(pem), pem)) == "verificable"
+end
+
 puts
 if @fallos.zero?
   puts "#{@corridas} pruebas, todas verdes."
