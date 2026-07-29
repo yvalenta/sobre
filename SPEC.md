@@ -92,6 +92,44 @@ El resultado son los bytes que se firman y sobre los que se verifica.
 > de raíz el mojibake de gateways que sirven sin `charset`, y vuelve
 > irrelevante si tu serializador escapa o no los no-ASCII.
 
+### 3.1 En qué difiere de JCS (RFC 8785), y por qué
+
+**JCS es el estándar de canonicalización JSON y esto no lo es.** Si venís de
+JCS, estas son las diferencias exactas — importan porque **producen bytes
+distintos, y por lo tanto firmas distintas**.
+
+| | JCS (RFC 8785) | El sobre §3 |
+|---|---|---|
+| Orden de claves | por unidades de código **UTF-16** | por bytes **UTF-8** |
+| Claves con valor `null` | **se conservan** | **se descartan**, recursivamente |
+| Escapado no-ASCII | literal UTF-8 | igual (literal), con ASCII recomendado |
+| Números | serialización de ECMAScript, muy especificada | se emiten tal cual |
+| `signature` en la raíz | no aplica | **se descarta** |
+
+**Las dos que de verdad importan:**
+
+**1. El orden.** JCS ordena por unidades UTF-16; acá se ordena comparando los
+**bytes UTF-8**. Para claves ASCII —que es el 99% de los casos— dan el mismo
+resultado. Divergen a partir de U+10000 (emoji, planos suplementarios): en UTF-16
+un par suplente empieza por `0xD8xx`, que ordena **antes** que caracteres del BMP
+como `�`; en UTF-8 ordena **después**. Un sobre con una clave emoji firmado
+por un emisor JCS no verificaría acá, y al revés.
+
+**2. Descartar los `null`.** JCS los conserva. Acá se descartan a propósito, y el
+motivo está en el §3.2: **un campo ausente y un campo en `null` deben producir
+los mismos bytes**, o agregar un campo opcional vacío rompería todas las firmas
+viejas. Es una decisión de compatibilidad hacia adelante, no un descuido.
+
+> **Por qué no se adoptó JCS y no se va a adoptar.** Cambiar de canonicalización
+> **invalida todas las firmas ya emitidas**, y este formato existe para que una
+> salida siga siendo comprobable dentro de diez años. Romper eso para ganar
+> conformidad con un RFC sería exactamente la promesa que el sobre dice no
+> romper.
+>
+> Lo que sí corresponde es **decirlo**, que es lo que hace esta sección: un
+> implementador que ya tiene JCS necesita saber en qué difiere antes de escribir
+> su verificador, y hasta el 2026-07-28 no podía saberlo.
+
 ---
 
 ## 4. Firma
@@ -152,6 +190,71 @@ todo lo firmado antes — que es precisamente lo que el sobre promete evitar.
 Que `firmado_sin_procedencia` sea un estado propio y no un fallo es
 deliberado: es el estado más común en la práctica y el que más se confunde con
 "verificado".
+
+### 6.1 Qué NO afirma un sobre
+
+**Un `verificable` es una afirmación estrecha, y decir cuál es su borde vale
+tanto como decir qué prueba.** Sin esto, el veredicto se lee como un sello de
+calidad y no lo es.
+
+> **Esta lista tuvo seis entradas y le faltaba una.** El 2026-07-29 se agregó la
+> de "qué programa recorrió el catálogo", que no estaba ni acá ni en el §10 de
+> pendientes — o sea que el hueco era invisible incluso para la propia lista de
+> deudas de esta spec. Una enumeración de bordes es lo que un lector cuidadoso
+> confía que sea **exhaustiva**; que le falte una la vuelve peor que no tenerla,
+> porque el que la lee deja de buscar.
+
+Un sobre `verificable` afirma exactamente tres cosas:
+
+1. Que **estos bytes** los firmó quien controla **esta llave**.
+2. Que el emisor **declaró** contra qué catálogo de reglas se comprueba
+   (`reglasHash`) y en qué fecha verificó esa normativa
+   (`reglasVerificadasAl`).
+3. Que dejó constancia de cómo trató los datos (`habeasData`).
+
+**Y no afirma ninguna de estas, aunque se le parezcan:**
+
+- **No afirma que el cálculo sea correcto.** Afirma que es *derivable del
+  catálogo declarado*. Si ese catálogo está mal, el sobre es válido y el número
+  es incorrecto — y el sobre te da exactamente lo que hace falta para
+  demostrarlo, que es el punto.
+- **No afirma qué programa recorrió el catálogo.** Dice contra qué catálogo se
+  comprueba (`reglasHash`), no qué código lo aplicó. Dos motores —uno correcto y
+  uno sutilmente equivocado— producen sobres **indistinguibles en procedencia**
+  mientras citen el mismo catálogo: la firma verifica, el `reglasHash` coincide, y
+  el número está mal. Es el borde más filoso de esta lista porque **el punto
+  anterior lo presupone**: "derivable del catálogo declarado" da por hecho que
+  algún programa lo derivó fielmente, y el sobre no le da al verificador ninguna
+  forma de comprobar cuál. Diseñado en [§10.1](#101-identidad-del-programa-que-firmó-diseño),
+  sin implementar.
+- **No afirma que el catálogo declarado sea el vigente.** `reglasVerificadasAl`
+  es la fecha en que el emisor *dijo* haberlo comprobado. Un sobre firmado hoy
+  contra normativa de hace dos años verifica igual. **La antigüedad es dato del
+  verificador, no del emisor.**
+- **No afirma nada sobre líneas de origen extralegal.** Bonos, comisiones y
+  conceptos pactados no se derivan de una norma, así que no se verifican: quedan
+  marcados como no verificables en vez de adivinarse. Un sobre `verificable`
+  puede contener líneas que nadie comprobó, **y lo dice**.
+- **No es dictamen contable ni asesoría legal.** En Colombia eso está reservado
+  (Ley 43/1990).
+- **No afirma nada sobre la infraestructura del emisor**: ni que su servidor sea
+  seguro, ni que sus datos estén bien custodiados, ni que la organización exista.
+  Ese es el terreno de las atestaciones de cumplimiento, y es **otro problema**.
+- **No afirma que el emisor sea confiable.** Una firma válida de un mentiroso es
+  una firma válida. Lo que cambia es que ahora **su mentira es reproducible por
+  un tercero**.
+
+> **Por qué esto va en la spec y no en un descargo legal.** Es la misma
+> distinción que sostiene los tres veredictos: `firmado_sin_procedencia` existe
+> porque "está firmado" y "es correcto" son cosas distintas, y **el estado más
+> peligroso de un sistema de verificación es el que se lee como más de lo que
+> es.** Un formato que no declara su borde invita a que un registry lo convierta
+> en insignia.
+>
+> La idea de exigir *non-claims* explícitos no es nuestra: apareció en la
+> discusión de la spec de descubrimiento ARD, en las mismas semanas y por el
+> mismo motivo. Convergencia independiente, que es la mejor señal de que la
+> distinción es real.
 
 ---
 
@@ -286,6 +389,114 @@ tipo de evidencia más, sin pedirle permiso a nadie.
 | **Verificador web sin instalación** | Soltás el JSON en una página y te dice el veredicto. Ed25519 ya está en WebCrypto en los tres motores, así que son ~100 líneas sin dependencias, servibles desde el Worker que ya sirve el agent card — sin tocar el VPS. Es el UX real de "un tercero verifica sin confiar en vos": un abogado o un inspector no instalan nada, pero abren un enlace |
 | Implementación en TypeScript | Cerraría el círculo: quien firma podría auto-verificarse con código que no es el suyo |
 | Derivar `publicKeyId` de los bytes crudos (v2) | Elimina la ambigüedad de serialización que la normalización hoy tapa |
+| **Identidad del programa que firmó** ([§10.1](#101-identidad-del-programa-que-firmó-diseño)) | El sobre ata los bytes, la llave y el catálogo — **no el código**. Dos motores que citen el mismo `reglasHash` son indistinguibles en procedencia. Diseñado; no implementado, y el porqué está abajo |
+
+### 10.1 Identidad del programa que firmó (diseño)
+
+El hueco está en [§6.1](#61-qué-no-afirma-un-sobre): el sobre ata **tres** cosas
+—los bytes, la llave, y el catálogo declarado— y ninguna es el código. Dos
+binarios que citen el mismo `reglasHash` producen sobres indistinguibles en
+procedencia, uno con el número bien y el otro mal.
+
+Esto queda diseñado y **no implementado**. Se escribe entero porque la decisión ya
+está tomada y no conviene volver a tomarla desde cero cuando aparezca el primer
+comprador que la pida.
+
+#### Los campos
+
+Dos strings planos de nivel raíz, al estilo de `reglasHash` /
+`reglasVerificadasAl` y no un objeto anidado:
+
+| Campo | Qué es |
+|---|---|
+| `motorHash` | sha256 hex de un **hash de árbol** del motor de reglas publicado |
+| `motorUri` | dónde se publica el manifiesto que ese hash cubre |
+
+`motorHash` **no** es un SHA de git —irresoluble para un tercero, y el repo del
+producto es privado— ni un digest de contenedor, que no es reproducible. Es
+sha256 sobre la lista ordenada de líneas `ruta\0sha256(contenido)` de la salida de
+build del motor, emitida en tiempo de build y publicada como manifiesto en
+`motorUri`.
+
+Da **dos** propiedades y conviene no confundirlas, porque solo una es
+incondicional:
+
+- **Enlazabilidad**, siempre: dos sobres con el mismo `motorHash` salieron del
+  mismo motor. Vale aunque el manifiesto no exista.
+- **Resolubilidad**, condicionada: bajás el manifiesto, recomputás, y confirmás
+  qué código fue. Depende de que el manifiesto esté publicado y siga estándolo.
+
+La primera es la garantía real; la segunda es una promesa sobre publicación, y una
+spec que las presente como una sola cosa está prometiendo de más.
+
+#### Aditivo puro, y esta parte no se puede errar
+
+[§3.1](#31-en-qué-difiere-de-jcs-rfc-8785-y-por-qué) es explícita en que la
+canonicalización está **congelada**, porque cambiarla invalida toda firma ya
+emitida. Una clave extra de nivel raíz es segura en las dos direcciones:
+`canonicalizar` es genérico y ordena las claves que encuentre, así que un sobre
+nuevo verifica bajo un verificador viejo, y un verificador nuevo sobre un sobre
+viejo simplemente no encuentra el campo.
+
+#### El check, y el único mecanismo nuevo que hace falta
+
+`sobre.motor_declarado`, **no crítico** y —a diferencia de todos los demás de
+`analizar`— **condicionado a presencia**:
+
+```ruby
+if doc.key?("motorHash")
+  add.call("sobre.motor_declarado", false, valido, ...)
+end
+```
+
+La condición no es una comodidad, la fuerza [§6](#6-los-tres-veredictos):
+`veredicto` devuelve `verificable` solo si **todos** los checks están en ok, así
+que un check no crítico incondicional volvería `firmado_sin_procedencia` a cada
+sobre ya emitido. La regla, en una línea:
+
+> **La ausencia no puede costar veredicto.**
+
+Y presente-pero-malformado da `firmado_sin_procedencia`, nunca `invalido`: una
+afirmación de procedencia mala no puede invalidar una entrega real.
+
+#### Orden de propagación
+
+Hay **cinco** lugares que implementan o documentan esta spec, y el orden no es
+preferencia de estilo: dos de ellos son copias vendorizadas con una guarda de
+igualdad contra su origen, así que hacerlo al revés deja el auditor en rojo entre
+paso y paso.
+
+1. **La implementación de referencia**, en su repo de origen → y en la misma
+   sesión, su copia vendorizada.
+2. **Los vectores y las pruebas nuevas**, también en el origen primero. No entran
+   en la asimetría registrada de los que leen `vectores/`, así que propagan a la
+   copia, y los conteos de pruebas se mueven en los dos lados.
+3. **La implementación JavaScript** del verificador web, en su origen → la copia
+   servida → despliegue. No está terminado hasta que la comparación byte a byte de
+   lo **servido** esté verde: un verificador viejo publicado verifica distinto que
+   el nuevo, y el que importa es el que abre un tercero.
+4. **Esta spec**: §2, §6.1, §7 y §10.
+5. **El producto, que es quien firma.** El motor emite el manifiesto durante el
+   build y la API agrega el campo al payload firmado.
+
+El paso 5 es el único que **no se puede hacer donde vive esta spec**: el hash solo
+se puede *computar* donde se construye el motor. Y esa asimetría es en sí misma un
+argumento para no emitir el campo todavía — un verificador que sabe comprobar un
+campo que nadie emite es una feature sin productor.
+
+#### Por qué no se implementa todavía
+
+- **Cero consumidores.** Un campo que nadie emite y nadie comprueba es una
+  afirmación que nadie verifica.
+- **El radio de explosión son cinco artefactos y una spec pública**, con dos
+  copias bajo guarda estricta y un deploy en el medio.
+- **El hash es irresoluble hasta que el manifiesto se publique**, y eso es trabajo
+  en otro repo. Emitir el campo primero es emitir la mitad débil.
+- **La lógica de §3.1 argumenta por esperar**: la canonicalización es para
+  siempre, y la misma disciplina que produjo esa sección dice diseñar el campo con
+  cuidado bajo presión real en vez de v1 de él bajo ninguna.
+
+Lo que sí valía cerrar hoy es el **borde**: que §6.1 no mintiera por omisión.
 
 **Binario en Rust: no, por ahora.** No hay caso de rendimiento (101 µs, ~9.900
 verificaciones/s en Ruby, y 83 µs de eso es la criptografía misma, que Rust
