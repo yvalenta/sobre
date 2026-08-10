@@ -471,6 +471,17 @@ alterado, uno sin firma, uno con una firma auténtica de otra llave, y uno
 firmado pero sin `reglasHash`—, porque aceptar los dos vectores buenos lo hace
 también un programa que responde que sí a todo.
 
+> **Los casos negativos se saltan si tu verificador no acepta un sobre válido**,
+> y no es una comodidad. El contrato es un código de salida, así que *"rechacé
+> el sobre"* y *"no pude ejecutarme"* son indistinguibles: un comando que no
+> existe rechaza todo y pasaba las cuatro pruebas de rechazo — un verificador
+> roto sacaba 4 de 6 y quien lo leyera creía estar casi listo.
+>
+> Lo encontró alguien copiando estos comandos con los nombres de archivo de
+> ejemplo tal cual, o sea el primer intento de cualquiera. **Si no sabés aceptar
+> un sobre bueno, tu rechazo no prueba nada**, y decirlo es más honesto que
+> contarlo como acierto.
+
 ---
 
 ## 9. Por qué es libre

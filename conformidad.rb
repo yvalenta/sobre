@@ -140,8 +140,35 @@ end
 def probar_verificador(cmd)
   puts "\nverificador — `#{cmd}`"
 
-  prueba("acepta el vector ASCII") { [correr(cmd, vector("sobre.json"))[1], nil] }
-  prueba("acepta el vector unicode") { [correr(cmd, vector("sobre-unicode.json"))[1], nil] }
+  ascii = correr(cmd, vector("sobre.json"))[1]
+  unicode = correr(cmd, vector("sobre-unicode.json"))[1]
+  prueba("acepta el vector ASCII") { [ascii, nil] }
+  prueba("acepta el vector unicode") { [unicode, nil] }
+
+  # ── Por qué los casos negativos se SALTAN si los positivos fallaron ────────
+  #
+  # El contrato del verificador es un código de salida, y eso vuelve
+  # indistinguible "rechacé el sobre" de "no pude ejecutarme". Un comando que no
+  # existe rechaza todo, así que **pasaba las cuatro pruebas de rechazo**: un
+  # verificador roto sacaba 4 de 6 y quien lo leyera creía estar casi listo.
+  #
+  # Lo encontró alguien copiando los comandos de ejemplo del README con los
+  # nombres de archivo tal cual — o sea, el primer intento de cualquiera. Es el
+  # mismo fallo que esta suite existe para cazar, adentro de esta suite.
+  #
+  # No se arregla exigiendo códigos de salida más finos: `python3 archivo-que-no-existe`
+  # sale con 2, que es justo el código de `firmado_sin_procedencia`. Se arregla
+  # aceptando el límite: **si no sabés aceptar un sobre bueno, tu rechazo no
+  # prueba nada**, y decirlo es más honesto que contarlo como acierto.
+  unless ascii || unicode
+    puts "  [  ·   ] los 4 casos de rechazo NO se evaluaron"
+    puts "              tu verificador no acepta ni un sobre válido, así que un rechazo"
+    puts "              suyo es indistinguible de que el comando no corra. Arreglá lo"
+    puts "              de arriba y volvé: hasta entonces, rechazar todo no prueba nada."
+    @fallos += 1
+    @corridas += 1
+    return
+  end
 
   # Las negativas son las que valen: un verificador que dice OK a todo pasa
   # las dos de arriba y no sirve para nada.

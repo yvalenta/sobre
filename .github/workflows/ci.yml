@@ -40,6 +40,12 @@ jobs:
       - name: la suite pasa
         run: ruby sobre_test.rb
 
+      # La herramienta que certifica a otros, certificada. Su modo de falla no
+      # es caerse: es APROBAR a quien no debe — y ya pasó una vez, aprobando
+      # los cuatro casos de rechazo de un verificador que ni existía.
+      - name: la conformidad no aprueba a quien no debe
+        run: ruby conformidad_test.rb
+
       # Además de la suite, se corre el comando TAL COMO lo documenta el §7 y
       # el README. Si la documentación y el CLI se separan, esto se pone rojo —
       # que es distinto de que la librería siga bien por dentro.

@@ -384,6 +384,17 @@ unsigned one, one carrying an authentic signature from a different key, and one
 signed but missing `reglasHash` — because accepting the two good vectors is also
 something a program that says yes to everything does.
 
+> **The negative cases are skipped if your verifier cannot accept a valid
+> envelope**, and that is not a convenience. The contract is an exit code, so
+> *"I rejected it"* and *"I failed to run"* are indistinguishable: a command that
+> does not exist rejects everything, and used to pass all four rejection checks —
+> a broken verifier scored 4 out of 6 and whoever read that believed they were
+> nearly done.
+>
+> It was found by someone copying these commands with the example filenames
+> as-is, which is anyone's first attempt. **If you cannot accept a good envelope,
+> your rejection proves nothing**, and saying so beats counting it as a pass.
+
 ---
 
 ## 9. Why it's free
