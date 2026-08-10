@@ -71,6 +71,31 @@ jobs:
             --verificador "ruby sobre.rb verificar - --llave vectores/llave-publica.pem" \
             --firmador "ruby sobre.rb firmar - --llave-privada vectores/llave-privada-SOLO-PRUEBAS.pem"
 
+      # El verificador web es la SEGUNDA implementación, y es la que abre un
+      # tercero desde el navegador. Que coincida con la de referencia es la
+      # evidencia de que el formato es implementable — o sea, lo único que
+      # separa a esto de "un JSON que le gusta a un repo".
+      #
+      # Se extraen sus funciones tal como se sirven, sin reescribirlas: si se
+      # adaptaran para la prueba, se estaría probando la adaptación.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: el verificador web canonicaliza igual que la referencia
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          html = pathlib.Path("web/index.html").read_text(encoding="utf-8")
+          codigo = html[html.index("function compararUtf8"):html.index("/* ── Llave ")]
+          pathlib.Path("/tmp/canon-web.js").write_text(
+            "const enc = new TextEncoder();\n" + codigo +
+            "\nlet s='';process.stdin.on('data',d=>s+=d)"
+            ".on('end',()=>{process.stdout.write(serializar(JSON.parse(s)))});\n",
+            encoding="utf-8")
+          PY
+          ruby conformidad.rb --canonicalizador "node /tmp/canon-web.js"
+
       # Y la parte que de verdad prueba que la conformidad SIRVE: una
       # implementación rota a propósito tiene que ser RECHAZADA. Un runner que
       # solo sabe decir OK es exactamente el problema que vino a resolver.

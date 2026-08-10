@@ -111,9 +111,14 @@ distintos, y por lo tanto firmas distintas**.
 **1. El orden.** JCS ordena por unidades UTF-16; acá se ordena comparando los
 **bytes UTF-8**. Para claves ASCII —que es el 99% de los casos— dan el mismo
 resultado. Divergen a partir de U+10000 (emoji, planos suplementarios): en UTF-16
-un par suplente empieza por `0xD8xx`, que ordena **antes** que caracteres del BMP
-como `�`; en UTF-8 ordena **después**. Un sobre con una clave emoji firmado
-por un emisor JCS no verificaría acá, y al revés.
+un par suplente empieza por `0xD800`, que ordena **antes** que un carácter alto
+del BMP como `Ａ` (U+FF21); en UTF-8 ordena **después**, porque `0xF0` es mayor
+que `0xEF`. Un sobre con una clave emoji firmado por un emisor JCS no
+verificaría acá, y al revés.
+
+Ese par exacto —`Ａ` contra `🐦`— es el que lleva el vector unicode del
+[§7](#el-vector-que-sí-prueba-lo-difícil), para que la divergencia no quede solo
+descrita sino **ejercitada**.
 
 **2. Descartar los `null`.** JCS los conserva. Acá se descartan a propósito, y el
 motivo está en el §3.2: **un campo ausente y un campo en `null` deben producir
@@ -350,18 +355,16 @@ orden de claves   ["-nota", "0", "descripción", "habeasData", "montos",
 > contener los pares donde los dos órdenes *discrepan*, y eso hay que buscarlo
 > a mano. Es la diferencia entre parecer exhaustivo y serlo.
 
-Dos trampas que hacen fallar a JavaScript si se implementa el §3 con
-`JSON.stringify` sobre un objeto reconstruido:
+El verificador web (`web/index.html`, el que se sirve en `ynt.codes/verificar`)
+resuelve las dos: serializa a mano en vez de reconstruir el objeto, y ordena con
+un comparador de bytes UTF-8 propio en lugar de `.sort()`. **Comprobado con este
+vector, no afirmado** — sus dos funciones, extraídas tal como se sirven, pasan
+`conformidad.rb`.
 
-1. **Claves que parecen enteros.** En JS, `"0"` se reordena sola al frente de
-   un objeto sin importar en qué orden la insertaste. Por eso hay que
-   **serializar a mano**, no reconstruir el objeto y dejar que el motor decida.
-2. **Orden de las claves no-ASCII.** JS ordena por unidades UTF-16; el §3 exige
-   bytes UTF-8. `"señal"` va **al final** (la ñ es `0xC3 0xB1`, mayor que `r`),
-   pero un `.sort()` a secas puede ponerla en otro lado. Hace falta un
-   comparador que ordene por bytes UTF-8.
-
-Ambas están resueltas en `web/index.html`.
+> Vale la pena el matiz: esa implementación estaba correcta desde que se
+> escribió. Lo que faltaba era un vector capaz de **ponerla a prueba**. Durante
+> semanas la afirmación "ambas están resueltas" fue cierta por suerte y no por
+> evidencia, que desde afuera se ve igual.
 
 ---
 
