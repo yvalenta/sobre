@@ -304,6 +304,58 @@ prueba("un sobre con tildes sobrevive a la tuberia sin romper la firma") do
   Sobre.veredicto(Sobre.analizar(leido, OpenSSL::PKey.read(pem), pem)) == "verificable"
 end
 
+# ── Las specs no pueden mentir sobre los vectores ───────────────────────────
+#
+# Hay DOS documentos normativos —SPEC.md en español y SPEC.en.md en inglés— y
+# los dos citan cifras concretas: cuántos bytes mide cada canónico, el
+# publicKeyId, la firma esperada, el orden de claves.
+#
+# La tentación es guardar "que digan lo mismo entre sí". Es inmantenible: son
+# textos distintos en idiomas distintos y cualquier reescritura de una frase
+# daría rojo. Lo que sí se puede vigilar —y es lo único que importa— es que
+# **las dos coincidan con los archivos de `vectores/`**, que son la fuente real.
+#
+# Traducir una spec agrega un segundo lugar donde desincronizarse; esto es la
+# guarda que esa decisión exigía.
+puts "\nlas specs contra los vectores"
+
+CANONICO = File.read(File.join(VEC, "canonico.txt"), encoding: "UTF-8")
+FIRMA_ASCII = Sobre.cargar(File.join(VEC, "sobre.json")).dig("signature", "valor")
+KEY_ID = Sobre.id_de_llave(File.read(File.join(VEC, "llave-publica.pem")))
+ORDEN_UNICODE = Sobre.canonicalizar(Sobre.cargar(UNI)).keys
+
+%w[SPEC.md SPEC.en.md].each do |archivo|
+  ruta = File.join(__dir__, archivo)
+  texto = File.read(ruta, encoding: "UTF-8")
+
+  prueba("#{archivo}: trae los bytes canónicos ASCII exactos") do
+    texto.include?(CANONICO)
+  end
+
+  prueba("#{archivo}: trae la firma ASCII esperada") do
+    texto.include?(FIRMA_ASCII)
+  end
+
+  prueba("#{archivo}: declara el publicKeyId de la llave entregada") do
+    texto.include?(KEY_ID)
+  end
+
+  prueba("#{archivo}: los dos tamaños que afirma son los reales") do
+    # Se buscan como palabra suelta para no enganchar un 251 dentro de otra cifra.
+    [CANONICO.bytesize, File.size(File.join(VEC, "canonico-unicode.txt"))]
+      .all? { |n| texto.match?(/\b#{n}\b/) }
+  end
+
+  prueba("#{archivo}: el orden de claves que publica es el real") do
+    # El listado va partido en varias líneas dentro de un bloque; se compara la
+    # secuencia de nombres, no el formato.
+    bloque = texto[/(?:orden de claves|key order)\s+\[(.*?)\]/m, 1]
+    next false if bloque.nil?
+
+    bloque.scan(/"([^"]*)"/).flatten == ORDEN_UNICODE
+  end
+end
+
 puts
 if @fallos.zero?
   puts "#{@corridas} pruebas, todas verdes."

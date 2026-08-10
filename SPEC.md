@@ -5,6 +5,15 @@ tercero, sin confiar en quien la emitió y sin conexión a su servidor.**
 
 Libre y abierto a propósito. Ver §9.
 
+> 🇬🇧 **English translation:** [`SPEC.en.md`](SPEC.en.md) traduce las partes
+> normativas —§2 a §8— para que nadie tenga que leer español para implementar
+> esto. **Este documento sigue siendo la fuente normativa**; el inglés deja
+> afuera las secciones de fundamentación por decisión, no por descuido.
+>
+> Las dos se mantienen sincronizadas por una guarda que compara **las cifras de
+> cada una contra `vectores/`**, no una contra la otra: dos textos en idiomas
+> distintos no se pueden diffear, pero sus afirmaciones sí se pueden medir.
+
 ---
 
 ## 1. El problema que resuelve

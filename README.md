@@ -5,6 +5,11 @@ tercero, sin confiar en quien la emitió y sin conexión a su servidor.**
 
 Libre y de dominio público. Ver [por qué](#por-qué-es-libre).
 
+> 🇬🇧 **English:** the normative parts of the spec are translated in
+> [`SPEC.en.md`](SPEC.en.md) — everything you need to implement, without reading
+> Spanish. Run `ruby conformidad.rb --canonicalizador "<your command>"` to check
+> your implementation against the test vectors.
+
 ---
 
 ## El problema
