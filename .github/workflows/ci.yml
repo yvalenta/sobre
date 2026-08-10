@@ -59,3 +59,38 @@ jobs:
             exit 1
           fi
           echo "correcto: lo rechazó"
+
+      # La referencia se somete al MISMO contrato que le pedimos a un tercero.
+      # Si `conformidad.rb` se rompiera, esto lo dice acá y no en la máquina de
+      # alguien que está intentando adoptar el formato — que es el peor lugar
+      # posible para descubrir que la herramienta de conformidad no sirve.
+      - name: la referencia pasa su propia suite de conformidad
+        run: |
+          ruby conformidad.rb \
+            --canonicalizador "ruby -r./sobre -rjson -e 'puts Sobre.bytes_canonicos(JSON.parse(\$stdin.read.force_encoding(%q{UTF-8})))'" \
+            --verificador "ruby sobre.rb verificar - --llave vectores/llave-publica.pem" \
+            --firmador "ruby sobre.rb firmar - --llave-privada vectores/llave-privada-SOLO-PRUEBAS.pem"
+
+      # Y la parte que de verdad prueba que la conformidad SIRVE: una
+      # implementación rota a propósito tiene que ser RECHAZADA. Un runner que
+      # solo sabe decir OK es exactamente el problema que vino a resolver.
+      - name: la conformidad RECHAZA un canonicalizador roto
+        run: |
+          cat > /tmp/roto.rb <<'RB'
+          require "json"
+          # Ordena por longitud en vez de por bytes: plausible y equivocado.
+          def c(v)
+            case v
+            when Hash then v.reject { |k, x| k == "signature" || x.nil? }
+                           .sort_by { |k, _| [k.length, k] }.to_h { |k, x| [k, c(x)] }
+            when Array then v.map { |x| c(x) }
+            else v
+            end
+          end
+          puts JSON.generate(c(JSON.parse($stdin.read.force_encoding("UTF-8"))))
+          RB
+          if ruby conformidad.rb --canonicalizador "ruby /tmp/roto.rb"; then
+            echo "FALLA: la conformidad aprobó una implementación rota" >&2
+            exit 1
+          fi
+          echo "correcto: la rechazó"

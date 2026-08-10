@@ -233,19 +233,33 @@ prueba("el canonico unicode publicado es el que produce la implementacion") do
     File.read(File.join(VEC, "canonico-unicode.txt"), encoding: "UTF-8")
 end
 
-prueba("el canonico unicode mide 365 bytes") do
-  File.size(File.join(VEC, "canonico-unicode.txt")) == 365
+prueba("el canonico unicode mide 525 bytes") do
+  File.size(File.join(VEC, "canonico-unicode.txt")) == 525
 end
 
-prueba("el vector unicode trae de verdad lo que hace fallar a JavaScript") do
-  # Si alguien lo "simplifica", deja de atrapar las dos trampas del §7 y vuelve
-  # a ser un vector que pasa sin probar nada. Por eso se afirma su CONTENIDO.
-  crudo = File.read(UNI, encoding: "UTF-8")
-  claves = Sobre.canonicalizar(JSON.parse(crudo)).keys
-  claves.first == "0" &&            # clave que parece entero: JS la reordena sola
-    claves[-2] == "señal" &&        # no-ASCII: ordena por bytes UTF-8, no UTF-16
-    crudo.include?("🐦") &&          # fuera del BMP: donde diverge de JCS
-    crudo.include?("€")
+# Las dos pruebas de abajo afirman que el vector SIGUE DISPARANDO las trampas.
+# No son paranoia: la primera version de este vector tenia ñ, €, — y un emoji, y
+# aun asi una implementacion ingenua de JavaScript la pasaba entera — los
+# caracteres raros estaban en posiciones donde la primera letra ya decidia el
+# orden. Lo descubrio `conformidad.rb` corriendo contra un canonicalizador roto
+# a proposito, no una relectura.
+#
+# Un vector que no dispara nada es peor que no tener vector: da confianza.
+
+prueba("el vector dispara la trampa de la clave tipo entero") do
+  # JavaScript sube "0" al frente de un objeto sin importar el orden de
+  # insercion. Para que eso DIVERGA hace falta una clave que ordene antes que
+  # "0" por bytes: "-" es 0x2D y "0" es 0x30.
+  claves = Sobre.canonicalizar(Sobre.cargar(UNI)).keys
+  claves[0] == "-nota" && claves[1] == "0"
+end
+
+prueba("el vector dispara la trampa del orden UTF-16") do
+  # U+FF21 (BMP alto) contra U+1F426 (sobre U+10000, par suplente en UTF-16).
+  # Por bytes UTF-8 va primero la Ａ (0xEF < 0xF0); por unidades UTF-16 va
+  # primero el emoji (0xD83D < 0xFF21). Es el punto exacto del §3.1.
+  claves = Sobre.canonicalizar(Sobre.cargar(UNI)).keys
+  claves.index("Ａmpliación") < claves.index("🐦canal")
 end
 
 # ── Entrada estandar: verificar en una tuberia, sin tocar el disco ───────────

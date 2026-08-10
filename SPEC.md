@@ -309,8 +309,8 @@ que hace que dos implementaciones "correctas" no se entiendan.
 implementación lo pasa, todavía no sabés si funciona: las dos trampas de abajo
 lo cruzan sin despeinarse.
 
-Por eso hay un segundo vector, con **tildes, ñ, `—`, `€`, un emoji y una clave
-`"0"`**, y **se entrega como archivo** — no como transcripción:
+Por eso hay un segundo vector, **construido para disparar las dos divergencias
+reales**, y se entrega como archivo — no como transcripción:
 
 ```
 vectores/sobre-unicode.json      el sobre firmado, listo para verificar
@@ -324,20 +324,31 @@ ruby sobre.rb verificar vectores/sobre-unicode.json --llave vectores/llave-publi
 Lo que tu implementación tiene que reproducir:
 
 ```
-bytes canónicos   365
-orden de claves   ["0", "descripción", "habeasData", "montos",
-                   "reglasHash", "reglasVerificadasAl", "señal", "version"]
+bytes canónicos   525
 publicKeyId       b6b3aa455b1826e2e04402d4a695e40f
+orden de claves   ["-nota", "0", "descripción", "habeasData", "montos",
+                   "reglasHash", "reglasVerificadasAl", "señal", "version",
+                   "Ａmpliación", "🐦canal"]
 ```
 
-> **Este vector reemplaza a una transcripción que no se entregaba.** Hasta el
-> 2026-08-09 esta sección describía en prosa un documento de 366 bytes que
-> **nunca estuvo en `vectores/`**: quien implementaba el sobre bajaba los
-> vectores, le pasaban todos, y se llevaba enteras las dos trampas que esta
-> misma sección advierte. El documento de hoy es otro —de ahí que sean 365 y no
-> 366, y que el orden traiga `version`—, pero está firmado, entregado y se
-> verifica con el comando de arriba. La cifra que vale es la de un archivo que
-> podés comprobar, no la de uno que hay que creer.
+**Los dos pares que importan, y por qué son esos:**
+
+| Par | Qué pasa si lo hacés como JavaScript |
+|---|---|
+| `"-nota"` antes de `"0"` | `-` es `0x2D` y `0` es `0x30`, así que por bytes va primero `-nota`. Pero en JavaScript las claves **tipo entero se reordenan solas al frente** de un objeto: si reconstruís el objeto y dejás que el motor decida, `"0"` salta al principio. Hay que **serializar a mano** |
+| `"Ａmpliación"` antes de `"🐦canal"` | `Ａ` es U+FF21 (`0xEF…` en UTF-8) y `🐦` es U+1F426 (`0xF0…`). Por bytes va primero la `Ａ`; **por unidades UTF-16 va primero el emoji**, porque es un par suplente que empieza en `0xD800`. Es exactamente el punto donde el [§3.1](#31-en-qué-difiere-de-jcs-rfc-8785-y-por-qué) se separa de JCS |
+
+> **Cómo se llegó a este vector, porque la lección es la que vale.** Hasta el
+> 2026-08-09 esta sección describía en prosa un documento que **nunca estuvo en
+> `vectores/`**. Al entregarlo por fin como archivo, tenía `ñ`, `—`, `€` y un
+> emoji —y **una implementación ingenua de JavaScript lo pasaba entera**: los
+> caracteres raros estaban en posiciones donde la primera letra ya decidía el
+> orden, así que nunca se comparaban. Lo descubrió `conformidad.rb` corriendo
+> contra un canonicalizador roto a propósito.
+>
+> **Un vector con caracteres raros no es un vector que pruebe algo.** Tiene que
+> contener los pares donde los dos órdenes *discrepan*, y eso hay que buscarlo
+> a mano. Es la diferencia entre parecer exhaustivo y serlo.
 
 Dos trampas que hacen fallar a JavaScript si se implementa el §3 con
 `JSON.stringify` sobre un objeto reconstruido:
@@ -366,16 +377,35 @@ ruby sobre.rb verificar <sobre.json> --llave-url https://host/publickey
 ruby sobre.rb verificar <sobre.json> --llave llave.pem --json
 ```
 
+**Emitir** un sobre, que es lo que hace falta para adoptarlo. Escribe en la
+salida estándar, así que se encadena:
+
+```bash
+ruby sobre.rb firmar documento.json --llave-privada llave.pem | ruby sobre.rb verificar -
+```
+
+Si al documento le falta `reglasHash`, `reglasVerificadasAl` o `habeasData`, el
+firmador **avisa por `stderr`** que el sobre va a salir como
+`firmado_sin_procedencia` y no como `verificable`. Firma igual —es un estado
+legal del formato, [§6](#6-los-tres-veredictos)— pero emitirlo sin darse cuenta
+es el error más fácil de cometer y el más difícil de ver después.
+
 ```bash
 ruby sobre_test.rb
 ```
 
-**23 pruebas, 12 de ellas negativas.** La proporción es intencional: un
+**La mayoría de las pruebas son NEGATIVAS, y la proporción es intencional:** un
 verificador que siempre dice OK se ve idéntico a uno que funciona, hasta que
-alguien lo ataca. Las pruebas comprueban que rechaza documentos alterados, con
-campos agregados, con campos borrados, firmados por otra llave, y firmados de
-verdad pero declarando una llave ajena. Cinco más blindan la normalización del
-PEM contra saltos de línea, CRLF y anchos de línea distintos.
+alguien lo ataca. Comprueban que rechaza documentos alterados, con campos
+agregados, con campos borrados, firmados por otra llave, y firmados de verdad
+pero declarando una llave ajena. Otras blindan la normalización del PEM contra
+saltos de línea, CRLF y anchos de línea distintos, y las últimas afirman que los
+vectores entregados **siguen disparando** las divergencias del §7.
+
+> El conteo exacto no se escribe acá a propósito: lo dice la corrida. Este mismo
+> párrafo decía «23 pruebas» —cierto para la copia vendorizada de `nomicheck_ops`
+> y falso para este repo, que no trae los mismos archivos—, y una cifra que
+> depende de dónde se lea es una cifra que va a estar mal en algún lado siempre.
 
 **Rendimiento medido** sobre el documento real de 2.258 bytes: **101 µs por
 verificación**, ~9.900 por segundo. De eso, 83 µs son Ed25519 puro y 18 µs la
@@ -385,6 +415,49 @@ lenguaje compilado — ver §10.
 `probe.rb` **delega** su canonicalización a `sobre.rb`. Dos copias de la regla
 que decide qué bytes se firman es la clase de deriva que nadie nota hasta que
 un comprador audita.
+
+### 8.1 Comprobar una implementación nueva
+
+`conformidad.rb` corre **tu** implementación contra los vectores. No hace falta
+escribirle a nadie ni pedir permiso:
+
+```bash
+ruby conformidad.rb --canonicalizador "node canon.js"
+ruby conformidad.rb --verificador     "python3 verify.py"
+ruby conformidad.rb --firmador        "go run sign.go"
+```
+
+El contrato con tu comando es deliberadamente mínimo —`stdin`, `stdout`, código
+de salida— para que se pueda cumplir en cualquier lenguaje sin adoptar ninguna
+convención nuestra:
+
+| Modo | Recibe por `stdin` | Debe responder |
+|---|---|---|
+| `--canonicalizador` | un documento JSON | los bytes canónicos del [§3](#3-forma-canónica) por `stdout` |
+| `--verificador` | un sobre JSON | salir con `0` **solo** si es `verificable` |
+| `--firmador` | un documento JSON | el sobre firmado por `stdout`, con la llave de `vectores/` |
+
+**Empezá por `--canonicalizador`.** Es donde divergen las implementaciones de
+verdad: un verificador roto se nota, pero una canonicalización distinta produce
+firmas que *parecen* válidas del lado de quien firma y no verifican del otro.
+
+Cuando falla no dice «no coincide»: nombra el byte exacto de la primera
+divergencia y, si es una de las dos causas conocidas, **cuál es**:
+
+```
+[FALLA ] vector unicode: produce los bytes canónicos exactos
+          primera divergencia en el byte 2
+            esperado: …"{\"-nota\":\"ordena antes de 0 por bytes…
+            obtenido: …"{\"0\":\"clave tipo entero: JavaScript…
+            → subiste la clave "0" al frente. En JavaScript las claves tipo
+              entero se reordenan solas: hay que SERIALIZAR a mano, no
+              reconstruir el objeto y dejar que el motor decida el orden (§7)
+```
+
+El verificador se comprueba sobre todo con casos **negativos** —un sobre
+alterado, uno sin firma, uno con una firma auténtica de otra llave, y uno
+firmado pero sin `reglasHash`—, porque aceptar los dos vectores buenos lo hace
+también un programa que responde que sí a todo.
 
 ---
 
@@ -410,8 +483,8 @@ tipo de evidencia más, sin pedirle permiso a nadie.
 |---|---|
 | ~~**Publicar la spec fuera del repo**~~ | **Hecho.** Vive en `github.com/yvalenta/sobre`, público y CC0 |
 | ~~**Verificador web sin instalación**~~ | **Hecho.** `ynt.codes/verificar` — se le suelta el JSON o una URL y devuelve el veredicto, bilingüe, sin instalar ni registrarse. El código es `web/index.html`, sin dependencias |
-| **Firmar con la implementación de referencia** | Hoy `sobre.rb` sabe `verificar` y `llave-id`, no `firmar`. Quien quiera **emitir** sobres —que es lo que hace falta para adoptarlo— escribe el firmador a ciegas desde este documento, sin nada contra qué contrastarlo. Es el hueco que más pesa para un tercero |
-| **Suite de conformidad** | Un runner que reciba *cualquier* comando externo y le pase los vectores, para que una implementación en otro lenguaje se autocertifique sin escribirle a nadie |
+| ~~**Firmar con la implementación de referencia**~~ | **Hecho.** `ruby sobre.rb firmar doc.json --llave-privada k.pem`. El `publicKeyId` lo **deriva** de la llave privada en vez de aceptarlo como parámetro: así el emisor no puede declarar un id que no corresponde a la llave con la que firmó, que es justo el ataque que `llave_declarada` caza del otro lado |
+| ~~**Suite de conformidad**~~ | **Hecho.** `conformidad.rb` — ver [§8.1](#81-comprobar-una-implementación-nueva) |
 | Implementación en TypeScript | Cerraría el círculo: quien firma podría auto-verificarse con código que no es el suyo |
 | Derivar `publicKeyId` de los bytes crudos (v2) | Elimina la ambigüedad de serialización que la normalización hoy tapa |
 | **Identidad del programa que firmó** ([§10.1](#101-identidad-del-programa-que-firmó-diseño)) | El sobre ata los bytes, la llave y el catálogo — **no el código**. Dos motores que citen el mismo `reglasHash` son indistinguibles en procedencia. Diseñado; no implementado, y el porqué está abajo |

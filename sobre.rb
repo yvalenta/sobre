@@ -194,6 +194,44 @@ module Sobre
     checks.all? { |c| c[:ok] } ? "verificable" : "firmado_sin_procedencia"
   end
 
+  # ── Firmar ────────────────────────────────────────────────────────────────
+  #
+  # Existe porque adoptar el sobre es EMITIRLO, no verificarlo. Hasta el
+  # 2026-08-09 la implementacion de referencia solo sabia verificar: quien
+  # queria emitir escribia el firmador desde el documento, a ciegas, sin nada
+  # contra que contrastarlo. Es al reves de lo que la adopcion necesita.
+  #
+  # `publicKeyId` se deriva de la llave PUBLICA sacada de la privada, no se pide
+  # aparte: pedirla seria dejar que alguien declare un id que no corresponde a la
+  # llave con la que firmo, y eso es exactamente el ataque que `llave_declarada`
+  # existe para cazar. Que el emisor no pueda cometerlo es mejor que detectarlo.
+  def self.firmar(doc, pem_privado)
+    sk = OpenSSL::PKey.read(pem_privado)
+    raise ArgumentError, "la llave no es Ed25519" unless sk.oid == "ED25519"
+
+    # `bytes_canonicos` ya descarta `signature`, asi que re-firmar un sobre
+    # produce la misma firma. No se prohibe: es util para rotar una llave.
+    bytes = bytes_canonicos(doc)
+    doc.reject { |k, _| k == "signature" }.merge(
+      "signature" => {
+        "algo" => "ed25519",
+        "valor" => Base64.strict_encode64(sk.sign(nil, bytes)),
+        "publicKeyId" => id_de_llave(sk.public_to_pem),
+        "cubreCampos" => "todos_menos_signature",
+        "canonical" => "sorted_keys_utf8_json"
+      },
+    )
+  end
+
+  # Lo que le falta a un documento para llegar a `verificable`. Se avisa al
+  # firmar —no se bloquea— porque un sobre sin `reglasHash` es un estado LEGAL
+  # del formato (§6): "firmado sin procedencia". Pero emitirlo sin darse cuenta
+  # es el error mas facil de cometer y el mas dificil de ver despues, asi que el
+  # firmador lo dice en voz alta.
+  def self.faltantes_para_procedencia(doc)
+    %w[reglasHash reglasVerificadasAl habeasData].reject { |c| doc.key?(c) }
+  end
+
   def self.llave_de_url(url)
     uri = URI(url)
     res = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https",
@@ -217,6 +255,7 @@ if __FILE__ == $PROGRAM_NAME
       sobre — verificador offline de salidas firmadas
 
         ruby sobre.rb verificar <sobre.json> [--llave a.pem | --llave-url URL] [--json]
+        ruby sobre.rb firmar <documento.json> --llave-privada <llave.pem>
         ruby sobre.rb llave-id <llave.pem>
 
       `-` en vez del archivo lee de la entrada estandar:
@@ -224,7 +263,11 @@ if __FILE__ == $PROGRAM_NAME
         curl -s https://host/ejemplo | jq .output |
           ruby sobre.rb verificar - --llave-url https://host/publickey --json
 
-      Salida: 0 verificable · 1 firma invalida · 2 firmado sin procedencia
+      Firmar escribe el sobre en la salida estandar, asi que se encadena:
+
+        ruby sobre.rb firmar doc.json --llave-privada k.pem | ruby sobre.rb verificar -
+
+      Salida de verificar: 0 verificable · 1 firma invalida · 2 firmado sin procedencia
     TXT
     exit 64
   end
@@ -236,6 +279,25 @@ if __FILE__ == $PROGRAM_NAME
   when "llave-id"
     ruta = ARGV.shift or uso
     puts Sobre.id_de_llave(File.read(ruta))
+    exit 0
+
+  when "firmar"
+    archivo = ARGV.shift or uso
+    i = ARGV.index("--llave-privada") or uso
+    priv = File.read(ARGV[i + 1])
+
+    doc = Sobre.cargar(archivo)
+    firmado = Sobre.firmar(doc, priv)
+
+    # Los avisos van a stderr y el sobre a stdout, para que la tuberia del `uso`
+    # funcione sin que un warning contamine el JSON.
+    faltan = Sobre.faltantes_para_procedencia(doc)
+    unless faltan.empty?
+      warn "  aviso: firmado, pero le falta #{faltan.join(', ')} — va a verificar"
+      warn "         como `firmado_sin_procedencia`, no como `verificable` (§6)."
+    end
+
+    puts JSON.generate(firmado)
     exit 0
 
   when "verificar"
