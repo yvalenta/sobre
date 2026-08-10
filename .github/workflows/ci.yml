@@ -82,6 +82,27 @@ jobs:
         with:
           node-version: "22"
 
+      # La implementación de Node, sometida al MISMO contrato que un tercero.
+      # Que dos programas independientes produzcan bytes idénticos es la única
+      # evidencia de que la spec se puede implementar leyéndola.
+      - name: la implementación JavaScript pasa la conformidad
+        run: |
+          ruby conformidad.rb \
+            --canonicalizador "node sobre.mjs canonicalizar -" \
+            --verificador "node sobre.mjs verificar - --llave vectores/llave-publica.pem" \
+            --firmador "node sobre.mjs firmar - --llave-privada vectores/llave-privada-SOLO-PRUEBAS.pem"
+
+      # Cruzada en las dos direcciones. La conformidad prueba cada una contra
+      # los vectores; esto prueba que se entienden ENTRE SÍ, que es lo que le
+      # va a pasar a un comprador real: firma un agente, verifica otro.
+      - name: Ruby y JavaScript se verifican mutuamente
+        run: |
+          ruby -rjson -e 'd=JSON.parse(File.read("vectores/sobre-unicode.json",encoding:"UTF-8")); d.delete("signature"); File.write("doc.json", JSON.generate(d))'
+          node sobre.mjs firmar doc.json --llave-privada vectores/llave-privada-SOLO-PRUEBAS.pem \
+            | ruby sobre.rb verificar - --llave vectores/llave-publica.pem
+          ruby sobre.rb firmar doc.json --llave-privada vectores/llave-privada-SOLO-PRUEBAS.pem \
+            | node sobre.mjs verificar - --llave vectores/llave-publica.pem
+
       - name: el verificador web canonicaliza igual que la referencia
         run: |
           python3 - <<'PY'

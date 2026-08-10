@@ -405,6 +405,6 @@ licence friction does not get adopted.
 
 | What | Why it matters |
 |---|---|
-| TypeScript implementation | Would close the loop: whoever signs could self-verify with code that isn't theirs |
+| ~~TypeScript implementation~~ | **Done, as plain JavaScript.** `sobre.mjs` — Node 18+, zero dependencies, no build step. Verifies, signs and canonicalizes; usable as a library and as a CLI. It passes `conformidad.rb` in all three modes and **produces byte-identical signatures** to the Ruby reference. Plain `.mjs` was chosen over TypeScript deliberately: a standard that needs `npm install`, a `tsconfig` and a build to be checked puts a barrier exactly where it shouldn't — it still type-checks with `tsc --checkJs --noEmit` |
 | Derive `publicKeyId` from raw key bytes (v2) | Removes the serialization ambiguity that normalization currently papers over |
 | **Identity of the program that signed** | The envelope binds the bytes, the key and the catalogue — **not the code**. Two engines citing the same `reglasHash` are indistinguishable in provenance. Designed, not implemented; the full design and the argument for waiting are in §10.1 of the Spanish spec |
