@@ -303,18 +303,41 @@ Si tus bytes canónicos coinciden pero tu firma no, el problema es el manejo de
 la llave. Si los bytes no coinciden, el problema es el §3 — y esa es la falla
 que hace que dos implementaciones "correctas" no se entiendan.
 
-### Validación cruzada Ruby ↔ JavaScript (2026-07-26)
+### El vector que sí prueba lo difícil
 
-El vector de arriba es ASCII puro, así que no prueba lo difícil. Se firmó en
-Ruby un segundo documento con **tildes, ñ, `—`, `€`, un emoji y una clave
-`"0"`**, y se verificó en JavaScript:
+**El vector de arriba es ASCII puro, así que no atrapa nada.** Si tu
+implementación lo pasa, todavía no sabés si funciona: las dos trampas de abajo
+lo cruzan sin despeinarse.
+
+Por eso hay un segundo vector, con **tildes, ñ, `—`, `€`, un emoji y una clave
+`"0"`**, y **se entrega como archivo** — no como transcripción:
 
 ```
-bytes canónicos   Ruby 366  ·  JS 366     idénticos
+vectores/sobre-unicode.json      el sobre firmado, listo para verificar
+vectores/canonico-unicode.txt    los bytes canónicos exactos que debe producir
+```
+
+```bash
+ruby sobre.rb verificar vectores/sobre-unicode.json --llave vectores/llave-publica.pem
+```
+
+Lo que tu implementación tiene que reproducir:
+
+```
+bytes canónicos   365
 orden de claves   ["0", "descripción", "habeasData", "montos",
-                   "reglasHash", "reglasVerificadasAl", "señal"]
-cambiar 🐦 por 🐧  → invalido
+                   "reglasHash", "reglasVerificadasAl", "señal", "version"]
+publicKeyId       b6b3aa455b1826e2e04402d4a695e40f
 ```
+
+> **Este vector reemplaza a una transcripción que no se entregaba.** Hasta el
+> 2026-08-09 esta sección describía en prosa un documento de 366 bytes que
+> **nunca estuvo en `vectores/`**: quien implementaba el sobre bajaba los
+> vectores, le pasaban todos, y se llevaba enteras las dos trampas que esta
+> misma sección advierte. El documento de hoy es otro —de ahí que sean 365 y no
+> 366, y que el orden traiga `version`—, pero está firmado, entregado y se
+> verifica con el comando de arriba. La cifra que vale es la de un archivo que
+> podés comprobar, no la de uno que hay que creer.
 
 Dos trampas que hacen fallar a JavaScript si se implementa el §3 con
 `JSON.stringify` sobre un objeto reconstruido:
@@ -385,8 +408,10 @@ tipo de evidencia más, sin pedirle permiso a nadie.
 
 | Qué | Por qué importa |
 |---|---|
-| **Publicar la spec fuera del repo** | Un estándar que vive en un repo privado no es un estándar. Máxima palanca, costo casi cero |
-| **Verificador web sin instalación** | Soltás el JSON en una página y te dice el veredicto. Ed25519 ya está en WebCrypto en los tres motores, así que son ~100 líneas sin dependencias, servibles desde el Worker que ya sirve el agent card — sin tocar el VPS. Es el UX real de "un tercero verifica sin confiar en vos": un abogado o un inspector no instalan nada, pero abren un enlace |
+| ~~**Publicar la spec fuera del repo**~~ | **Hecho.** Vive en `github.com/yvalenta/sobre`, público y CC0 |
+| ~~**Verificador web sin instalación**~~ | **Hecho.** `ynt.codes/verificar` — se le suelta el JSON o una URL y devuelve el veredicto, bilingüe, sin instalar ni registrarse. El código es `web/index.html`, sin dependencias |
+| **Firmar con la implementación de referencia** | Hoy `sobre.rb` sabe `verificar` y `llave-id`, no `firmar`. Quien quiera **emitir** sobres —que es lo que hace falta para adoptarlo— escribe el firmador a ciegas desde este documento, sin nada contra qué contrastarlo. Es el hueco que más pesa para un tercero |
+| **Suite de conformidad** | Un runner que reciba *cualquier* comando externo y le pase los vectores, para que una implementación en otro lenguaje se autocertifique sin escribirle a nadie |
 | Implementación en TypeScript | Cerraría el círculo: quien firma podría auto-verificarse con código que no es el suyo |
 | Derivar `publicKeyId` de los bytes crudos (v2) | Elimina la ambigüedad de serialización que la normalización hoy tapa |
 | **Identidad del programa que firmó** ([§10.1](#101-identidad-del-programa-que-firmó-diseño)) | El sobre ata los bytes, la llave y el catálogo — **no el código**. Dos motores que citen el mismo `reglasHash` son indistinguibles en procedencia. Diseñado; no implementado, y el porqué está abajo |

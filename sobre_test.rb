@@ -210,6 +210,44 @@ prueba("la llave privada de pruebas reproduce esa firma exacta") do
   Base64.strict_encode64(sk.sign(nil, bytes)) == doc["signature"]["valor"]
 end
 
+# ── El vector unicode, que es el unico que atrapa algo ──────────────────────
+#
+# Todo lo de arriba usa el vector ASCII, y el propio §7 dice que ese "no prueba
+# lo dificil": una implementacion con las dos trampas de JavaScript lo pasa
+# entero. Hasta el 2026-08-09 el vector dificil existia SOLO como prosa en la
+# spec — quien implementaba bajaba los vectores, le pasaban todos, y se llevaba
+# los dos bugs que la spec dedica media seccion a advertir.
+UNI = File.join(VEC, "sobre-unicode.json")
+
+prueba("el sobre unicode publicado verifica con la llave publicada") do
+  doc = Sobre.cargar(UNI)
+  pem = File.read(File.join(VEC, "llave-publica.pem"))
+  Sobre.veredicto(Sobre.analizar(doc, OpenSSL::PKey.read(pem), pem)) == "verificable"
+end
+
+prueba("el canonico unicode publicado es el que produce la implementacion") do
+  # Rojo aca significa una de dos, y las dos son noticia: o cambio la
+  # canonicalizacion —y entonces se invalidaron todas las firmas ya emitidas,
+  # ver §3.1— o el .txt quedo viejo.
+  Sobre.bytes_canonicos(Sobre.cargar(UNI)) ==
+    File.read(File.join(VEC, "canonico-unicode.txt"), encoding: "UTF-8")
+end
+
+prueba("el canonico unicode mide 365 bytes") do
+  File.size(File.join(VEC, "canonico-unicode.txt")) == 365
+end
+
+prueba("el vector unicode trae de verdad lo que hace fallar a JavaScript") do
+  # Si alguien lo "simplifica", deja de atrapar las dos trampas del §7 y vuelve
+  # a ser un vector que pasa sin probar nada. Por eso se afirma su CONTENIDO.
+  crudo = File.read(UNI, encoding: "UTF-8")
+  claves = Sobre.canonicalizar(JSON.parse(crudo)).keys
+  claves.first == "0" &&            # clave que parece entero: JS la reordena sola
+    claves[-2] == "señal" &&        # no-ASCII: ordena por bytes UTF-8, no UTF-16
+    crudo.include?("🐦") &&          # fuera del BMP: donde diverge de JCS
+    crudo.include?("€")
+end
+
 # ── Entrada estandar: verificar en una tuberia, sin tocar el disco ───────────
 
 prueba("`-` lee de la entrada estandar y da el mismo documento que el archivo") do

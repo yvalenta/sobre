@@ -1,0 +1,61 @@
+# Comprueba que la implementación de referencia siga cumpliendo sus vectores.
+#
+# ── Por qué esto importa más acá que en un repo normal ──────────────────────
+#
+# El valor entero del sobre es que dos implementaciones independientes produzcan
+# los MISMOS bytes. Si la canonicalización cambia sin querer, no se rompe una
+# prueba: se invalidan todas las firmas ya emitidas, y nadie se entera hasta que
+# alguien intenta verificar un documento viejo. Eso no se descubre a tiempo
+# revisando el diff — se descubre corriendo los vectores en cada push.
+#
+# Hasta el 2026-08-09 nada corría esta suite automáticamente. La spec afirmaba
+# vectores que solo se comprobaban cuando alguien se acordaba.
+#
+# Sin dependencias a propósito: `sobre.rb` es stdlib pura y la suite también. Un
+# estándar que necesita un gestor de paquetes para comprobarse a sí mismo pone
+# una barrera justo donde no debe.
+
+name: ci
+
+on:
+  push:
+  pull_request:
+  # Los vectores incluyen una fecha (`reglasVerificadasAl`) y el verificador
+  # calcula su antigüedad. Correr sin cambios, de vez en cuando, atrapa lo que
+  # se pudre por el paso del tiempo y no por un commit.
+  schedule:
+    - cron: "17 6 * * 1"
+
+jobs:
+  vectores:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: false
+
+      - name: la suite pasa
+        run: ruby sobre_test.rb
+
+      # Además de la suite, se corre el comando TAL COMO lo documenta el §7 y
+      # el README. Si la documentación y el CLI se separan, esto se pone rojo —
+      # que es distinto de que la librería siga bien por dentro.
+      - name: el vector ASCII verifica con el comando documentado
+        run: ruby sobre.rb verificar vectores/sobre.json --llave vectores/llave-publica.pem
+
+      - name: el vector unicode verifica con el comando documentado
+        run: ruby sobre.rb verificar vectores/sobre-unicode.json --llave vectores/llave-publica.pem
+
+      # Un verificador que dice OK a todo se ve idéntico a uno que funciona.
+      # Esto lo ataca: se altera un byte y se EXIGE que falle.
+      - name: un sobre alterado NO verifica
+        run: |
+          sed 's/1234567/1234568/' vectores/sobre-unicode.json > /tmp/alterado.json
+          if ruby sobre.rb verificar /tmp/alterado.json --llave vectores/llave-publica.pem; then
+            echo "FALLA: el verificador aceptó un documento alterado" >&2
+            exit 1
+          fi
+          echo "correcto: lo rechazó"
