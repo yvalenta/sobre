@@ -45,9 +45,11 @@ ruby conformidad.rb \
 **Verde = interoperable.** No hay revisión humana de por medio. Podés empezar
 solo con `--canonicalizador`: la suite corre lo que le des.
 
-## Los cuatro lugares donde se rompe
+## Los lugares donde se rompe
 
-No están acá porque suenen difíciles: los cuatro ya rompieron algo real.
+No están acá porque suenen difíciles: cada uno ya rompió algo real. (El
+título no lleva conteo a propósito: la lista crece cuando un implementador
+nuevo paga un peaje nuevo.)
 
 **1. El orden de claves es por bytes UTF-8, no por unidades UTF-16.**
 `Array.prototype.sort()` de JavaScript ordena por UTF-16 y **da otro orden**
@@ -68,6 +70,17 @@ double con un bucle de 1 a 17 — no dependas de tu librería.
 **4. La normalización del PEM.** `publicKeyId` es `sha256(pem normalizado)`
 truncado a 32 hex, y el PEM se normaliza a base64 en líneas de 64 con salto
 final. **Un solo `\n` de diferencia cambia el id** — ya pasó.
+
+**5. stdin son bytes, no texto.** El contrato de proceso entrega **bytes
+UTF-8** por stdin; si tu runtime los decodifica con la codificación de la
+consola, el documento entra corrupto y el error revienta lejos del culpable.
+El caso real (reportado por el primer implementador externo, 2026-08-11):
+`sys.stdin.read()` en Python bajo Windows decodifica con cp1252 y el fallo
+aparece recién al canonicalizar, como `UnicodeEncodeError: surrogates not
+allowed` — señalando al lugar equivocado. Leé los bytes y decodificá vos:
+`sys.stdin.buffer.read().decode("utf-8")`. Y lo simétrico al emitir: escribí
+bytes UTF-8 a stdout (`sys.stdout.buffer.write(...)`), no texto en la
+codificación por defecto.
 
 ## Los tres veredictos, y por qué no son dos
 
