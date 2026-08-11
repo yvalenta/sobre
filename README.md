@@ -60,6 +60,10 @@ deliberado: es el más común en la práctica y el que más se confunde con
 
 ## Implementarlo en otro lenguaje
 
+**La guía completa está en [`IMPLEMENTAR.md`](IMPLEMENTAR.md)** — el contrato
+de proceso de la conformidad, los cuatro lugares donde se rompe de verdad y la
+definición de terminado. Lo de abajo es el resumen.
+
 Leé [`SPEC.md`](SPEC.md) — son seis reglas de canonicalización y una firma
 Ed25519. Después comprobá tu implementación contra
 [`vectores/`](vectores/), que trae la llave, el sobre, los bytes canónicos
