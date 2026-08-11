@@ -30,6 +30,9 @@ require "json"
 require "openssl"
 require "base64"
 require "digest"
+# Solo para expandir un decimal a notacion plana sin perder digitos. Es stdlib
+# (gema por defecto), asi que el sobre sigue sin dependencias que instalar.
+require "bigdecimal"
 require "net/http"
 require "uri"
 require "time"
@@ -77,46 +80,99 @@ module Sobre
           "como string si necesitas mas precision."
   end
 
-  # ── Los decimales: normalizar lo que se puede, rechazar lo que no ───────────
+  # ── Los decimales ───────────────────────────────────────────────────────────
   #
-  # El diagnostico correcto NO es "cada lenguaje serializa distinto". Es mas
-  # profundo: **Ruby conserva la distincion entero/decimal y JavaScript no.**
-  # Medido el 2026-08-10:
+  # Este bloque se reescribio entero el 2026-08-10, el mismo dia que se escribio,
+  # porque la primera version RECHAZABA TODO DECIMAL y eso rompio produccion: la
+  # entrega real trae `baseGravableUvt: 105.4` —los UVT son fraccionarios por
+  # definicion— y el verificador desplegado paso a llamar `INVALIDO` a un sobre
+  # legitimo y bien firmado. Un verificador que rechaza evidencia valida es peor
+  # que no tener verificador.
   #
-  #     JSON.parse("1.0")   Ruby => Float 1.0   JS => 1  (Number.isInteger da true)
-  #     JSON.parse("1e3")   Ruby => Float 1000  JS => 1000
-  #     JSON.parse("-0.0")  Ruby => Float -0.0  JS => 0
+  # El diagnostico que justificaba aquel rechazo era falso. Se midio de nuevo,
+  # comparando los BITS del double y no su texto, sobre 60.000 valores
+  # aleatorios:
   #
-  # En JavaScript `1.0` y `1` son EL MISMO VALOR despues del parse. No hay
-  # forma de que JS los distinga, asi que ninguna regla que dependa de esa
-  # distincion se puede cumplir en los dos lados. Rechazar todo Float tampoco
-  # sirve: JS no sabria cual rechazar.
+  #   1. **El parseo NO diverge.** El mismo literal da el mismo double en Ruby y
+  #      en JS, bit a bit. Los dos hacen conversion correctamente redondeada.
+  #   2. **El que se desvia es la gema `json` al IMPRIMIR.** ECMAScript le exige
+  #      a JavaScript la representacion mas corta que round-trippea; `JSON.generate`
+  #      emite el equivalente de `%.17g`. Medido sobre el double 40d9b6ca11b1d92b:
+  #      `JSON.generate` da `26331.157329999998` y JavaScript da `26331.15733`.
+  #      Mismo numero, distinto texto, distinta firma.
   #
-  # Lo unico implementable en ambos: **si el numero VALE un entero, se emite
-  # como entero.** `1.0`, `1e3` y `-0.0` son enteros disfrazados y se
-  # normalizan a `1`, `1000` y `0`. Ahi los dos lenguajes coinciden porque los
-  # dos llegan al mismo valor.
+  # Ojo con el detalle, porque invita a un atajo equivocado: `Float#to_s` SI da la
+  # forma corta. Delegar en el seria Ruby-especifico y ademas cambia a exponencial
+  # en umbrales distintos que JS, asi que no se puede escribir en una spec que
+  # otro lenguaje tiene que poder cumplir.
   #
-  # Lo que queda —un decimal de verdad, como 0.1— se RECHAZA, y ahi si los dos
-  # coinciden en rechazarlo. El motivo es el de siempre: un binario flotante es
-  # mala idea para evidencia legal (0.1 + 0.2 no da 0.3 en ninguna parte), y
-  # adoptar la serializacion de ECMAScript como JCS pondria justo la barrera de
-  # implementacion que este formato dice no querer.
+  # O sea: los decimales SI son interoperables; lo que no servia era delegar el
+  # formato en el generador de JSON. Se emula el algoritmo de JS buscando la
+  # precision mas chica que vuelve al mismo double —eso ES "shortest round-trip",
+  # se implementa con un bucle en cualquier lenguaje y no depende de la libreria
+  # de nadie— y se emite en notacion plana, que es la que JS usa en toda la banda
+  # admitida. Con eso las 60.000 coinciden: 0 divergencias.
   #
-  # Si necesitas decimales, codifica en la unidad minima —centavos en vez de
-  # pesos— o como string. Es lo que hacen los sistemas financieros, y por esto.
-  #
-  # Compatibilidad: ningun sobre emitido hasta hoy trae decimales (comprobado
-  # contra los vectores y contra una entrega real de produccion), asi que esto
-  # no invalida una sola firma existente.
-  def self.normalizar_flotante!(f)
-    # `-0.0` incluido a proposito: `(-0.0).to_i` es 0, que es lo que JS produce.
-    return entero_seguro!(f.to_i) if f.finite? && f == f.to_i
+  # Queda UNA banda rechazada, y es angosta a proposito: `0 < |x| < 1e-6`. Ahi
+  # JS pasa a exponencial (`1e-7`) y Ruby todavia imprime plano (`0.0000001`).
+  # Reconciliar eso obligaria a reimplementar las reglas de formato de ECMAScript
+  # —la barrera de implementacion que este formato dice no querer— para valores
+  # que no significan nada como evidencia. Por el otro extremo no hace falta
+  # cortar: todo flotante no entero es menor que 2^52, muy por debajo del punto
+  # donde JS cambiaria de notacion.
+  DECIMAL_MINIMO = 1e-6
 
-    raise ErrorDeCanonicalizacion,
-          "los decimales no son representables de forma interoperable (#{f}). " \
-          "Cada lenguaje los serializa distinto, asi que la firma no coincidiria. " \
-          "Codifica en la unidad minima (centavos) o como string."
+  def self.normalizar_flotante!(f)
+    unless f.finite?
+      raise ErrorDeCanonicalizacion,
+            "#{f} no es representable en JSON (ni Infinity ni NaN lo son)."
+    end
+
+    # `1.0`, `1e3` y `-0.0` son enteros disfrazados: en JavaScript son EL MISMO
+    # VALOR que `1`, `1000` y `0` despues del parse, y alli se emiten sin punto.
+    # `-0.0` va incluido a proposito — `(-0.0).to_i` da 0, que es lo que hace JS.
+    return entero_seguro!(f.to_i) if f == f.to_i
+
+    if f.abs < DECIMAL_MINIMO
+      raise ErrorDeCanonicalizacion,
+            "decimal demasiado chico para canonicalizar de forma interoperable (#{f}). " \
+            "Abajo de 1e-6 JavaScript cambia a notacion exponencial y Ruby no, asi que " \
+            "la firma no coincidiria. Codificalo como string o en una unidad mayor."
+    end
+
+    Crudo.new(decimal_canonico(f))
+  end
+
+  # Los digitos EXACTOS que emitiria JavaScript: la precision mas chica que
+  # round-trippea. Se prueba de 1 a 17 porque 17 siempre alcanza para un double.
+  def self.decimal_canonico(f)
+    (1..17).each do |p|
+      s = format("%.#{p}g", f)
+      next unless s.to_f == f
+
+      # `%g` puede salir en exponencial; JS usa plana en toda esta banda, asi que
+      # se expande sin perder digitos. El `.0` sobrante no se llega a dar acá
+      # —los enteros ya salieron por `entero_seguro!`— pero se poda por si acaso.
+      return BigDecimal(s).to_s("F").sub(/\.0\z/, "")
+    end
+
+    # Inalcanzable con un double: se deja explicito en vez de devolver nil y
+    # producir `null` en la salida, que es la clase de fallo silencioso que este
+    # archivo entero existe para evitar.
+    raise ErrorDeCanonicalizacion, "no se encontro representacion que round-trippee para #{f}"
+  end
+
+  # Un numero ya serializado, que `JSON.generate` tiene que emitir TAL CUAL.
+  #
+  # Hace falta porque la canonicalizacion produce objetos de Ruby y recien
+  # despues se genera el JSON: si `decimal_canonico` devolviera un String, saldria
+  # entrecomillado y cambiaria el tipo del campo. `to_json` es el gancho que
+  # `JSON.generate` llama para los objetos que no conoce.
+  class Crudo
+    def initialize(texto) = @texto = texto
+    def to_json(*_args) = @texto
+    def to_s = @texto
+    def ==(other) = other.is_a?(Crudo) ? to_s == other.to_s : to_s == other.to_s
   end
 
   def self.bytes_canonicos(doc)

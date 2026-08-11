@@ -105,25 +105,38 @@ def probar_canonicalizador(cmd)
   # vector porque la mitad se comprueba por RECHAZO, y un vector solo sabe
   # afirmar bytes.
   #
-  # La regla (§3.2): si el número vale un entero se emite como entero; un
-  # decimal de verdad y un entero sobre 2^53-1 se rechazan. Sale de que Ruby
-  # conserva la distinción entero/decimal y JavaScript no.
+  # La regla (§3.2): si el número vale un entero se emite como entero; un decimal
+  # se emite con los dígitos MÁS CORTOS que vuelven al mismo double, en notación
+  # plana. Se rechazan los enteros sobre 2^53-1 y los decimales bajo 1e-6.
   { '{"v":1.0}' => '{"v":1}',
     '{"v":1e3}' => '{"v":1000}',
-    '{"v":-0.0}' => '{"v":0}' }.each do |entrada, esperado|
-    prueba("normaliza el entero disfrazado de decimal: #{entrada}") do
+    '{"v":-0.0}' => '{"v":0}',
+    # Un decimal corriente sobrevive. Este caso es el que hubiera atajado el
+    # error del 2026-08-10: la primera versión de la regla los rechazaba a todos
+    # y dejó a producción —que emite UVT fraccionarios— sin poder verificarse.
+    '{"v":105.4}' => '{"v":105.4}',
+    '{"v":0.1}' => '{"v":0.1}',
+    # El que separa "shortest round-trip" de "lo que imprima tu librería": en
+    # Ruby `JSON.generate` da 17 dígitos para este double y JavaScript da 10.
+    '{"v":2.633115733e4}' => '{"v":26331.15733}',
+    # El borde, afirmado por el lado que SÍ pasa.
+    '{"v":1e-6}' => '{"v":0.000001}' }.each do |entrada, esperado|
+    prueba("canonicaliza el número: #{entrada}") do
       obtenido, ok = correr(cmd, entrada)
       obtenido = obtenido.to_s.sub(/\n\z/, "")
       next [false, "el comando falló"] unless ok
       next [true, nil] if obtenido == esperado
 
-      [false, "esperado #{esperado} · obtenido #{obtenido}. Si tu lenguaje distingue " \
-              "entero de decimal (Ruby, Python), normalizá: JavaScript ya llega a " \
-              "#{esperado} y la firma tiene que coincidir con la suya"]
+      [false, "esperado #{esperado} · obtenido #{obtenido}. JavaScript llega a " \
+              "#{esperado} y la firma tiene que coincidir con la suya. Si tu lenguaje " \
+              "distingue entero de decimal (Ruby, Python), normalizá los que valen " \
+              "entero; y si tu serializador no emite la forma más corta que " \
+              "round-trippea, buscá la precisión más chica que vuelve al mismo double " \
+              "en vez de confiar en él"]
     end
   end
 
-  { '{"v":0.1}' => "un decimal de verdad",
+  { '{"v":1e-7}' => "un decimal bajo 1e-6",
     '{"v":9007199254740993}' => "un entero sobre 2^53-1" }.each do |entrada, que|
     prueba("RECHAZA #{que}: #{entrada}") do
       _salida, ok = correr(cmd, entrada)

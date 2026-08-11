@@ -336,14 +336,47 @@ prueba("un entero disfrazado de decimal se normaliza") do
     Sobre.bytes_canonicos({ "v" => -0.0 }) == '{"v":0}'
 end
 
-prueba("un decimal de verdad se RECHAZA en vez de firmarse") do
-  # Firmar algo que el otro lado no puede reproducir es peor que no firmar.
-  [0.1, 100.5, 3.14159].all? do |f|
+prueba("un decimal de verdad se emite, no se rechaza") do
+  # Esta prueba afirmaba lo CONTRARIO hasta el 2026-08-10, y la version que
+  # rechazaba rompio produccion: la entrega real trae `baseGravableUvt: 105.4`.
+  Sobre.bytes_canonicos({ "v" => 0.1 }) == '{"v":0.1}' &&
+    Sobre.bytes_canonicos({ "v" => 105.4 }) == '{"v":105.4}' &&
+    Sobre.bytes_canonicos({ "v" => 127.96 }) == '{"v":127.96}' &&
+    Sobre.bytes_canonicos({ "v" => 3.14159 }) == '{"v":3.14159}'
+end
+
+prueba("se emiten los digitos de JS, no los de JSON.generate") do
+  # El caso que delato el diagnostico, y la razon de que la canonicalizacion no
+  # pueda delegar el formato en la gema `json`: para ESTE double, `JSON.generate`
+  # emite 17 digitos y JavaScript emite 10. Mismo numero, distinto texto,
+  # distinta firma.
+  #
+  # `Float#to_s` si da la forma corta — el que se desvia es el generador de JSON,
+  # que usa el equivalente de `%.17g`. Se afirman las dos cosas para que, si una
+  # version futura de la gema lo cambia, esta prueba lo diga en vez de aprobar
+  # por accidente.
+  v = JSON.parse("[2.633115733e4]")[0]
+  JSON.generate(v) == "26331.157329999998" &&
+    v.to_s == "26331.15733" &&
+    Sobre.bytes_canonicos({ "v" => v }) == '{"v":26331.15733}'
+end
+
+prueba("un decimal abajo de 1e-6 se RECHAZA") do
+  # Unica banda irreconciliable: JS pasa a exponencial (`1e-7`) y Ruby imprime
+  # plano (`0.0000001`). Firmar algo que el otro lado no reproduce es peor que
+  # no firmar.
+  [1e-7, 5e-9, -1e-7].all? do |f|
     Sobre.bytes_canonicos({ "v" => f })
     false
   rescue Sobre::ErrorDeCanonicalizacion
     true
   end
+end
+
+prueba("1e-6 justo en el borde SI se emite") do
+  # El borde se afirma en los dos sentidos: una guarda que solo prueba el lado
+  # que rechaza no distingue "corta donde debe" de "corta de mas".
+  Sobre.bytes_canonicos({ "v" => 1e-6 }) == '{"v":0.000001}'
 end
 
 prueba("un entero sobre 2^53-1 se RECHAZA") do
@@ -360,12 +393,18 @@ prueba("el ultimo entero seguro SI pasa") do
   Sobre.bytes_canonicos({ "v" => 9_007_199_254_740_991 }) == '{"v":9007199254740991}'
 end
 
-prueba("el rechazo ocurre tambien anidado, no solo en la raiz") do
-  # Un decimal escondido en un array adentro de un objeto tiene que doler igual.
-  Sobre.bytes_canonicos({ "a" => { "b" => [1, { "c" => 0.5 }] } })
-  false
-rescue Sobre::ErrorDeCanonicalizacion
-  true
+prueba("la regla se aplica anidada, no solo en la raiz") do
+  # Un numero escondido en un array adentro de un objeto se canonicaliza igual
+  # —y uno de la banda prohibida tiene que doler igual de hondo—.
+  emitido = Sobre.bytes_canonicos({ "a" => { "b" => [1, { "c" => 0.5 }] } }) ==
+            '{"a":{"b":[1,{"c":0.5}]}}'
+  rechazado = begin
+    Sobre.bytes_canonicos({ "a" => { "b" => [1, { "c" => 1e-9 }] } })
+    false
+  rescue Sobre::ErrorDeCanonicalizacion
+    true
+  end
+  emitido && rechazado
 end
 
 puts "\nlas specs contra los vectores"

@@ -381,13 +381,22 @@ function compararUtf8(a, b) {
   return A.length - B.length;
 }
 
-/* Números (spec §3.2). Un número que VALE un entero se emite como entero, y un
-   decimal de verdad o un entero sobre 2^53-1 se rechazan. Sale de que Ruby
-   conserva la distinción entero/decimal y JavaScript no: sin esta regla, un
-   sobre firmado en Ruby con 1.0 adentro no verificaba acá. */
+/* Números (spec §3.2). Un número que VALE un entero se emite como entero; un
+   decimal se emite con los dígitos más cortos que vuelven al mismo double, que
+   es lo que `JSON.stringify` ya hace acá sin ayuda. Se rechazan los enteros
+   sobre 2^53-1 y los decimales bajo 1e-6 —única banda donde JavaScript pasa a
+   exponencial y Ruby no—.
+
+   La primera versión de esta regla rechazaba TODO decimal, y con eso esta
+   página llamó `INVALIDO` a la entrega real de producción, que trae UVT
+   fraccionarios. Un verificador que rechaza evidencia legítima es peor que no
+   tener verificador. */
 function numeroSeguro(n) {
-  if (!Number.isInteger(n)) {
-    throw new Error(`decimal no representable de forma interoperable: ${n}`);
+  if (!Number.isFinite(n)) {
+    throw new Error(`no representable en JSON: ${n}`);
+  }
+  if (!Number.isInteger(n) && Math.abs(n) < 1e-6) {
+    throw new Error(`decimal bajo 1e-6, no interoperable: ${n}`);
   }
   if (Math.abs(n) > Number.MAX_SAFE_INTEGER) {
     throw new Error(`entero fuera del rango seguro (|n| > 2^53-1): ${n}`);

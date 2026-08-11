@@ -146,21 +146,29 @@ viejas. Es una decisión de compatibilidad hacia adelante, no un descuido.
 
 ---
 
-### 3.2 Números — enteros, y por qué
+### 3.2 Números
 
-**Un número que vale un entero se emite como entero. Un decimal de verdad, o un
-entero mayor a 2^53−1, se RECHAZAN.**
+**Un número que vale un entero se emite como entero. Un decimal se emite con los
+dígitos más cortos que vuelven al mismo `double`, en notación plana. Se RECHAZAN
+los enteros mayores a 2^53−1 y los decimales con `0 < |x| < 1e-6`.**
 
 ```
-1.0    →  1          -0.0  →  0        (enteros disfrazados: se normalizan)
-1e3    →  1000
-0.1    →  RECHAZADO             9007199254740993  →  RECHAZADO
+1.0     →  1            -0.0   →  0       (enteros disfrazados: se normalizan)
+1e3     →  1000
+0.1     →  0.1          105.4  →  105.4   (los decimales se emiten)
+2.633115733e4  →  26331.15733             (los dígitos MÁS CORTOS, no los que imprima tu librería)
+1e-7              →  RECHAZADO
+9007199254740993  →  RECHAZADO
 ```
 
-El motivo no es estético. **Ruby conserva la distinción entero/decimal y
-JavaScript no**: después de `JSON.parse`, en JavaScript `1.0` y `1` son el mismo
-valor, y no hay forma de distinguirlos. Medido entre las dos implementaciones de
-referencia el 2026-08-10, antes de esta regla:
+#### Por qué
+
+Dos cosas distintas, y conviene no mezclarlas.
+
+**(1) Los enteros disfrazados.** Ruby conserva la distinción entero/decimal y
+JavaScript no: después de `JSON.parse`, en JavaScript `1.0` y `1` son el mismo
+valor y no hay forma de distinguirlos. Medido entre las dos implementaciones de
+referencia el 2026-08-10:
 
 ```
 {"v":1.0}    Ruby → {"v":1.0}      JS → {"v":1}
@@ -168,30 +176,59 @@ referencia el 2026-08-10, antes de esta regla:
 {"v":-0.0}   Ruby → {"v":-0.0}     JS → {"v":0}
 ```
 
-Bytes distintos son firmas distintas: **un sobre emitido en Ruby con `1.0`
-adentro no verificaba en JavaScript.** El bug estaba vivo y escondido solo
-porque todos los vectores usaban enteros.
+Normalizar es lo único que las dos pueden cumplir: JavaScript ya llega a `1`, así
+que el resto tiene que llegar ahí también.
 
-Normalizar es lo único que las dos pueden cumplir — JavaScript ya llega a `1`,
-así que el resto tiene que llegar ahí también. Y lo que no se puede normalizar
-se rechaza en los dos lados, que es mejor que firmar algo que el otro no puede
-reproducir.
+**(2) Los dígitos de un decimal.** Acá el diagnóstico intuitivo —"cada lenguaje
+serializa los flotantes distinto"— es **falso**, y comprobarlo importa porque
+lleva a la regla equivocada. Comparando los **bits** del `double` sobre 60.000
+valores aleatorios:
+
+- **El parseo no diverge.** El mismo literal da el mismo `double` en Ruby y en
+  JavaScript, bit a bit. Los dos hacen conversión correctamente redondeada.
+- **El que se desvía es el serializador de Ruby.** ECMAScript le exige a
+  JavaScript la representación **más corta que round-trippea**; la gema `json`
+  de Ruby emite el equivalente de `%.17g`. Para el `double` `40d9b6ca11b1d92b`:
+
+```
+JSON.generate  (Ruby)  →  26331.157329999998
+JSON.stringify (JS)    →  26331.15733
+```
+
+Mismo número, distinto texto, distinta firma. La regla es **emitir los dígitos
+más cortos**, que es lo que JavaScript hace solo. En cualquier otro lenguaje se
+consigue con un bucle —probar precisiones de 1 a 17 y quedarse con la primera que
+vuelve al mismo `double`— sin depender de la librería de nadie.
+
+> **Ojo con un atajo que no sirve:** en Ruby, `Float#to_s` *sí* da la forma corta.
+> Delegar en él sería específico de Ruby y además cambia a exponencial en umbrales
+> distintos a los de JavaScript, así que no se puede escribir en una spec que otro
+> lenguaje tiene que poder cumplir.
+
+#### Las dos bandas que se rechazan
 
 **El techo de 2^53−1** es donde JavaScript deja de leer enteros sin redondear:
 `JSON.parse("9007199254740993")` devuelve `…992`. Un sobre por encima de ese
 valor tendría firmas distintas sin que nada avisara.
 
-> **Si necesitás decimales, codificá en la unidad mínima** —centavos en vez de
-> pesos— **o como string.** Es lo que hacen los sistemas financieros, y por esta
-> razón: un binario flotante es mala idea para evidencia legal, porque
-> `0.1 + 0.2` no da `0.3` en ninguna parte.
->
-> Se descartó adoptar la serialización de ECMAScript (lo que hace JCS) porque es
-> difícil de implementar bien en cada lenguaje — justo la barrera que este
-> formato dice no querer poner — y no arregla el problema de fondo.
+**El piso de 1e-6** es donde JavaScript pasa a notación exponencial (`1e-7`) y
+Ruby todavía imprime plano (`0.0000001`). Reconciliarlo obligaría a reimplementar
+las reglas de formato de ECMAScript —la barrera que este formato dice no querer
+poner— para valores que no significan nada como evidencia. Por el extremo grande
+no hace falta cortar: **todo flotante no entero es menor que 2^52**, muy por
+debajo del punto donde JavaScript cambiaría de notación.
 
-Ningún sobre emitido antes de esta regla trae decimales, así que **no invalida
-una sola firma existente**.
+> **Un binario flotante sigue siendo mala idea para dinero**, porque `0.1 + 0.2`
+> no da `0.3` en ninguna parte. Si podés, codificá en la unidad mínima —centavos
+> en vez de pesos— o como string. Lo que esta regla garantiza es que un decimal
+> **se firme y se verifique igual en los dos lados**, no que sea buena idea.
+
+> **Esta regla se corrigió el día que se escribió.** Su primera versión rechazaba
+> *todos* los decimales, y con eso el verificador publicado pasó a declarar
+> `INVALIDO` un sobre legítimo de producción, que emite unidades tributarias
+> fraccionarias (`105.4`). El diagnóstico de fondo estaba mal, y la regla que
+> salía de él rompía a quien decía proteger. Queda escrito porque el error es más
+> instructivo que la regla.
 
 ## 4. Firma
 

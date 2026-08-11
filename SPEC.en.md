@@ -134,21 +134,29 @@ not an oversight.
 
 ---
 
-### 3.2 Numbers — integers, and why
+### 3.2 Numbers
 
-**A number that is integral is emitted as an integer. A true decimal, or an
-integer above 2^53−1, is REJECTED.**
+**A number that is integral is emitted as an integer. A decimal is emitted with
+the shortest digits that round-trip to the same `double`, in plain notation.
+Integers above 2^53−1 and decimals with `0 < |x| < 1e-6` are REJECTED.**
 
 ```
-1.0    →  1          -0.0  →  0        (integers in disguise: normalized)
-1e3    →  1000
-0.1    →  REJECTED             9007199254740993  →  REJECTED
+1.0     →  1            -0.0   →  0       (integers in disguise: normalized)
+1e3     →  1000
+0.1     →  0.1          105.4  →  105.4   (decimals are emitted)
+2.633115733e4  →  26331.15733             (the SHORTEST digits, not whatever your library prints)
+1e-7              →  REJECTED
+9007199254740993  →  REJECTED
 ```
 
-The reason is not cosmetic. **Ruby preserves the integer/decimal distinction and
-JavaScript does not**: after `JSON.parse`, in JavaScript `1.0` and `1` are the
-same value, and nothing can tell them apart. Measured between the two reference
-implementations on 2026-08-10, before this rule:
+#### Why
+
+Two separate things, worth not conflating.
+
+**(1) Integers in disguise.** Ruby preserves the integer/decimal distinction and
+JavaScript does not: after `JSON.parse`, `1.0` and `1` are the same value in
+JavaScript, indistinguishable. Measured between the two reference
+implementations on 2026-08-10:
 
 ```
 {"v":1.0}    Ruby → {"v":1.0}      JS → {"v":1}
@@ -156,29 +164,59 @@ implementations on 2026-08-10, before this rule:
 {"v":-0.0}   Ruby → {"v":-0.0}     JS → {"v":0}
 ```
 
-Different bytes are different signatures: **an envelope emitted in Ruby with
-`1.0` inside would not verify in JavaScript.** The bug was live, and hidden only
-because every test vector used integers.
+Normalizing is the only thing both can honour: JavaScript already lands on `1`,
+so everyone else has to land there too.
 
-Normalizing is the one thing both can do — JavaScript already lands on `1`, so
-everyone else must land there too. What cannot be normalized is rejected on both
-sides, which beats signing something the other end cannot reproduce.
+**(2) The digits of a decimal.** Here the intuitive diagnosis — "every language
+serializes floats differently" — is **false**, and checking it matters because it
+leads to the wrong rule. Comparing the **bits** of the `double` across 60,000
+random values:
+
+- **Parsing does not diverge.** The same literal yields the same `double` in Ruby
+  and JavaScript, bit for bit. Both perform correctly rounded conversion.
+- **Ruby's serializer is the outlier.** ECMAScript *requires* JavaScript to emit
+  the **shortest round-tripping** representation; Ruby's `json` gem emits the
+  equivalent of `%.17g`. For the `double` `40d9b6ca11b1d92b`:
+
+```
+JSON.generate  (Ruby)  →  26331.157329999998
+JSON.stringify (JS)    →  26331.15733
+```
+
+Same number, different text, different signature. The rule is to **emit the
+shortest digits**, which JavaScript does on its own. In any other language a loop
+gets you there — try precisions 1 through 17, keep the first that round-trips to
+the same `double` — with no dependency on anyone's library.
+
+> **A shortcut that does not work:** in Ruby, `Float#to_s` *does* give the short
+> form. Relying on it would be Ruby-specific, and it switches to exponential
+> notation at different thresholds than JavaScript, so it cannot be written into
+> a spec that another language must be able to satisfy.
+
+#### The two rejected bands
 
 **The 2^53−1 ceiling** is where JavaScript stops reading integers without
 rounding: `JSON.parse("9007199254740993")` returns `…992`. An envelope above that
-value would produce different signatures with nothing to warn you.
+value would produce diverging signatures with nothing to warn you.
 
-> **If you need decimals, encode in the smallest unit** — cents rather than
-> dollars — **or as a string.** That is what financial systems do, and for this
-> reason: binary floats are a bad idea for legal evidence, because `0.1 + 0.2`
-> is not `0.3` anywhere.
->
-> Adopting ECMAScript number serialization (what JCS does) was rejected because
-> it is hard to implement correctly in every language — exactly the barrier this
-> format claims not to want — and it does not fix the underlying problem.
+**The 1e-6 floor** is where JavaScript switches to exponential notation (`1e-7`)
+while Ruby still prints plain (`0.0000001`). Reconciling that would mean
+reimplementing ECMAScript's formatting rules — the very implementation barrier
+this format refuses to impose — for values that carry no evidentiary meaning. No
+cut is needed at the large end: **every non-integral float is below 2^52**, well
+under the point where JavaScript would change notation.
 
-No envelope emitted before this rule contains decimals, so it **invalidates no
-existing signature**.
+> **A binary float is still a bad idea for money**, because `0.1 + 0.2` is not
+> `0.3` anywhere. Where you can, encode in the smallest unit — cents rather than
+> dollars — or as a string. What this rule guarantees is that a decimal **signs
+> and verifies identically on both sides**, not that it is a good idea.
+
+> **This rule was corrected the same day it was written.** Its first version
+> rejected *all* decimals, and with it the published verifier began declaring a
+> legitimate production envelope `INVALID` — production emits fractional tax
+> units (`105.4`). The underlying diagnosis was wrong, and the rule derived from
+> it broke the very thing it claimed to protect. It is recorded here because the
+> mistake teaches more than the rule.
 
 ## 4. Signature
 

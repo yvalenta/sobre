@@ -70,16 +70,31 @@ export class ErrorDeCanonicalizacion extends Error {
 // que la firma dejaría de coincidir con la de Ruby SIN QUE NADA AVISE.
 const ENTERO_MAXIMO = Number.MAX_SAFE_INTEGER;
 
-// Los decimales se rechazan en vez de especificarse. Cada lenguaje serializa
-// los flotantes distinto: medido entre estas dos implementaciones, `1.0` sale
-// `1.0` en Ruby y `1` en JS, y `-0.0` sale `-0.0` y `0`. Bytes distintos =
-// firmas distintas. Ver el comentario largo en `sobre.rb` para el porqué de
-// rechazar en vez de adoptar la serialización de ECMAScript.
+// Los decimales SÍ se admiten. La primera versión de esta regla los rechazaba a
+// todos y rompió producción el mismo día: la entrega real trae
+// `baseGravableUvt: 105.4` y el verificador pasó a decir `INVALIDO` sobre un
+// sobre legítimo.
+//
+// Medido comparando los bits del double, no su texto: el parseo NO diverge entre
+// Ruby y JS, y el que se aparta es la gema `json` de Ruby al imprimir —emite el
+// equivalente de `%.17g`, mientras ECMAScript le exige a JavaScript la forma más
+// corta que round-trippea—. La referencia emula ese algoritmo con un bucle; acá
+// `JSON.stringify` ya lo hace solo, que es justo por qué JS es el lado correcto.
+//
+// Queda rechazada una sola banda, `0 < |x| < 1e-6`: ahí JS pasa a exponencial
+// (`1e-7`) y Ruby sigue imprimiendo plano (`0.0000001`). Ver el comentario largo
+// en `sobre.rb`.
+const DECIMAL_MINIMO = 1e-6;
+
 function numeroSeguro(n) {
-  if (!Number.isInteger(n)) {
+  if (!Number.isFinite(n)) {
+    throw new ErrorDeCanonicalizacion(`${n} no es representable en JSON.`);
+  }
+  if (!Number.isInteger(n) && Math.abs(n) < DECIMAL_MINIMO) {
     throw new ErrorDeCanonicalizacion(
-      `los decimales no son representables de forma interoperable (${n}). ` +
-        "Codificá en la unidad mínima (centavos) o como string.",
+      `decimal demasiado chico para canonicalizar de forma interoperable (${n}). ` +
+        "Abajo de 1e-6 JavaScript cambia a notación exponencial y Ruby no. " +
+        "Codificalo como string o en una unidad mayor.",
     );
   }
   if (Math.abs(n) > ENTERO_MAXIMO) {
