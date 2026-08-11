@@ -191,9 +191,14 @@ valores aleatorios:
   de Ruby emite el equivalente de `%.17g`. Para el `double` `40d9b6ca11b1d92b`:
 
 ```
-JSON.generate  (Ruby)  →  26331.157329999998
-JSON.stringify (JS)    →  26331.15733
+JSON.generate  (Ruby, gema json 2.21.1)  →  26331.157329999998
+JSON.stringify (JavaScript)              →  26331.15733
 ```
+
+> La versión va anotada porque **no todas las versiones de la gema tienen el
+> defecto**: escrito sin ella, esto se lee como una propiedad de Ruby y no lo es.
+> La regla no depende de eso — se emiten los dígitos más cortos, salga lo que
+> salga de la librería.
 
 Mismo número, distinto texto, distinta firma. La regla es **emitir los dígitos
 más cortos**, que es lo que JavaScript hace solo. En cualquier otro lenguaje se

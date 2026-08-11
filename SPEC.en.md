@@ -179,9 +179,13 @@ random values:
   equivalent of `%.17g`. For the `double` `40d9b6ca11b1d92b`:
 
 ```
-JSON.generate  (Ruby)  →  26331.157329999998
-JSON.stringify (JS)    →  26331.15733
+JSON.generate  (Ruby, json gem 2.21.1)  →  26331.157329999998
+JSON.stringify (JavaScript)             →  26331.15733
 ```
+
+> The version is stated because **not every version of the gem has the defect**:
+> without it, this reads as a property of Ruby, and it is not. The rule does not
+> depend on that — emit the shortest digits, whatever the library produces.
 
 Same number, different text, different signature. The rule is to **emit the
 shortest digits**, which JavaScript does on its own. In any other language a loop

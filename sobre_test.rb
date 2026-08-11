@@ -345,20 +345,25 @@ prueba("un decimal de verdad se emite, no se rechaza") do
     Sobre.bytes_canonicos({ "v" => 3.14159 }) == '{"v":3.14159}'
 end
 
-prueba("se emiten los digitos de JS, no los de JSON.generate") do
-  # El caso que delato el diagnostico, y la razon de que la canonicalizacion no
-  # pueda delegar el formato en la gema `json`: para ESTE double, `JSON.generate`
-  # emite 17 digitos y JavaScript emite 10. Mismo numero, distinto texto,
-  # distinta firma.
+prueba("se emiten los digitos MAS CORTOS que round-trippean") do
+  # El caso que delato el diagnostico: con la gema `json` 2.21.1 este double sale
+  # `26331.157329999998` de `JSON.generate` y `26331.15733` de JavaScript. Mismo
+  # numero, distinto texto, distinta firma.
   #
-  # `Float#to_s` si da la forma corta — el que se desvia es el generador de JSON,
-  # que usa el equivalente de `%.17g`. Se afirman las dos cosas para que, si una
-  # version futura de la gema lo cambia, esta prueba lo diga en vez de aprobar
-  # por accidente.
+  # La prueba NO afirma lo que hace `JSON.generate`, a proposito: se escribio asi
+  # primero y se puso roja en CI, donde una version distinta de la gema no tiene
+  # el defecto. Afirmar el defecto de una dependencia hace que la guarda mida la
+  # version instalada en vez de la propiedad. Lo que se exige es la propiedad, que
+  # es cierta en toda version y en todo lenguaje: los digitos emitidos vuelven al
+  # mismo double, y ninguno mas corto lo hace.
   v = JSON.parse("[2.633115733e4]")[0]
-  JSON.generate(v) == "26331.157329999998" &&
-    v.to_s == "26331.15733" &&
-    Sobre.bytes_canonicos({ "v" => v }) == '{"v":26331.15733}'
+  emitido = Sobre.bytes_canonicos({ "v" => v })[/:(.*)\}/, 1]
+
+  vuelve = emitido.to_f == v
+  digitos = emitido.delete("-.").sub(/\A0+/, "").length
+  ninguno_mas_corto = (1...digitos).none? { |p| format("%.#{p}g", v).to_f == v }
+
+  emitido == "26331.15733" && vuelve && ninguno_mas_corto
 end
 
 prueba("un decimal abajo de 1e-6 se RECHAZA") do
