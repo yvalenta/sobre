@@ -37,6 +37,12 @@ require "time"
 module Sobre
   VERSION = "1"
 
+  # Un documento que NO se puede canonicalizar de forma interoperable. Es un
+  # error del insumo, no del verificador: se lanza igual al firmar y al
+  # verificar, asi que los dos lados coinciden en rechazarlo en vez de producir
+  # firmas que no se entienden entre si.
+  class ErrorDeCanonicalizacion < StandardError; end
+
   # Forma canonica: claves ordenadas recursivamente, sin `signature` y sin
   # nulos. Los nulos se descartan porque un campo ausente y un campo en null
   # deben producir los mismos bytes — si no, agregar un campo opcional vacio
@@ -47,8 +53,70 @@ module Sobre
       v.reject { |k, val| k == "signature" || val.nil? }
        .sort_by { |k, _| k }.to_h { |k, val| [k, canonicalizar(val)] }
     when Array then v.map { |x| canonicalizar(x) }
+    when Float then normalizar_flotante!(v)
+    when Integer then entero_seguro!(v)
     else v
     end
+  end
+
+  # El techo de los enteros: 2^53 - 1.
+  #
+  # Arriba de eso JavaScript **no puede leer el numero sin redondearlo**, asi
+  # que un sobre con 9007199254740993 se canonicaliza distinto en Ruby y en JS
+  # —medido: JS devuelve ...992— y las firmas divergen SIN QUE NADA AVISE. Es
+  # el peor modo de falla posible para este formato: el emisor cree que firmo
+  # bien y el verificador de enfrente dice invalido.
+  ENTERO_MAXIMO = (2**53) - 1
+
+  def self.entero_seguro!(n)
+    return n if n.abs <= ENTERO_MAXIMO
+
+    raise ErrorDeCanonicalizacion,
+          "entero fuera del rango seguro (|n| > 2^53-1): #{n}. JavaScript no puede " \
+          "leerlo sin redondear, asi que la firma no seria interoperable. Codificalo " \
+          "como string si necesitas mas precision."
+  end
+
+  # ── Los decimales: normalizar lo que se puede, rechazar lo que no ───────────
+  #
+  # El diagnostico correcto NO es "cada lenguaje serializa distinto". Es mas
+  # profundo: **Ruby conserva la distincion entero/decimal y JavaScript no.**
+  # Medido el 2026-08-10:
+  #
+  #     JSON.parse("1.0")   Ruby => Float 1.0   JS => 1  (Number.isInteger da true)
+  #     JSON.parse("1e3")   Ruby => Float 1000  JS => 1000
+  #     JSON.parse("-0.0")  Ruby => Float -0.0  JS => 0
+  #
+  # En JavaScript `1.0` y `1` son EL MISMO VALOR despues del parse. No hay
+  # forma de que JS los distinga, asi que ninguna regla que dependa de esa
+  # distincion se puede cumplir en los dos lados. Rechazar todo Float tampoco
+  # sirve: JS no sabria cual rechazar.
+  #
+  # Lo unico implementable en ambos: **si el numero VALE un entero, se emite
+  # como entero.** `1.0`, `1e3` y `-0.0` son enteros disfrazados y se
+  # normalizan a `1`, `1000` y `0`. Ahi los dos lenguajes coinciden porque los
+  # dos llegan al mismo valor.
+  #
+  # Lo que queda —un decimal de verdad, como 0.1— se RECHAZA, y ahi si los dos
+  # coinciden en rechazarlo. El motivo es el de siempre: un binario flotante es
+  # mala idea para evidencia legal (0.1 + 0.2 no da 0.3 en ninguna parte), y
+  # adoptar la serializacion de ECMAScript como JCS pondria justo la barrera de
+  # implementacion que este formato dice no querer.
+  #
+  # Si necesitas decimales, codifica en la unidad minima —centavos en vez de
+  # pesos— o como string. Es lo que hacen los sistemas financieros, y por esto.
+  #
+  # Compatibilidad: ningun sobre emitido hasta hoy trae decimales (comprobado
+  # contra los vectores y contra una entrega real de produccion), asi que esto
+  # no invalida una sola firma existente.
+  def self.normalizar_flotante!(f)
+    # `-0.0` incluido a proposito: `(-0.0).to_i` es 0, que es lo que JS produce.
+    return entero_seguro!(f.to_i) if f.finite? && f == f.to_i
+
+    raise ErrorDeCanonicalizacion,
+          "los decimales no son representables de forma interoperable (#{f}). " \
+          "Cada lenguaje los serializa distinto, asi que la firma no coincidiria. " \
+          "Codifica en la unidad minima (centavos) o como string."
   end
 
   def self.bytes_canonicos(doc)

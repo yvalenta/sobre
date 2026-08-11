@@ -54,9 +54,47 @@ export function compararUtf8(a, b) {
   return A.length - B.length;
 }
 
+/**
+ * Un documento que no se puede canonicalizar de forma interoperable. Mismo
+ * criterio que la referencia en Ruby: se lanza al firmar y al verificar.
+ */
+export class ErrorDeCanonicalizacion extends Error {
+  constructor(mensaje) {
+    super(mensaje);
+    this.name = "ErrorDeCanonicalizacion";
+  }
+}
+
+// Techo de los enteros: 2^53 - 1. Arriba de eso JavaScript ya no puede leer el
+// número sin redondearlo —`JSON.parse("9007199254740993")` devuelve ...992— así
+// que la firma dejaría de coincidir con la de Ruby SIN QUE NADA AVISE.
+const ENTERO_MAXIMO = Number.MAX_SAFE_INTEGER;
+
+// Los decimales se rechazan en vez de especificarse. Cada lenguaje serializa
+// los flotantes distinto: medido entre estas dos implementaciones, `1.0` sale
+// `1.0` en Ruby y `1` en JS, y `-0.0` sale `-0.0` y `0`. Bytes distintos =
+// firmas distintas. Ver el comentario largo en `sobre.rb` para el porqué de
+// rechazar en vez de adoptar la serialización de ECMAScript.
+function numeroSeguro(n) {
+  if (!Number.isInteger(n)) {
+    throw new ErrorDeCanonicalizacion(
+      `los decimales no son representables de forma interoperable (${n}). ` +
+        "Codificá en la unidad mínima (centavos) o como string.",
+    );
+  }
+  if (Math.abs(n) > ENTERO_MAXIMO) {
+    throw new ErrorDeCanonicalizacion(
+      `entero fuera del rango seguro (|n| > 2^53-1): ${n}. JavaScript no puede ` +
+        "leerlo sin redondear, así que la firma no sería interoperable.",
+    );
+  }
+  return n;
+}
+
 /** Los bytes canónicos del §3: sin `signature`, sin nulos, claves ordenadas. */
 export function bytesCanonicos(v) {
   if (v === null || v === undefined) return "null";
+  if (typeof v === "number") return JSON.stringify(numeroSeguro(v));
   if (Array.isArray(v)) return "[" + v.map(bytesCanonicos).join(",") + "]";
   if (typeof v === "object") {
     const claves = Object.keys(v)

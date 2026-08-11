@@ -134,6 +134,52 @@ not an oversight.
 
 ---
 
+### 3.2 Numbers — integers, and why
+
+**A number that is integral is emitted as an integer. A true decimal, or an
+integer above 2^53−1, is REJECTED.**
+
+```
+1.0    →  1          -0.0  →  0        (integers in disguise: normalized)
+1e3    →  1000
+0.1    →  REJECTED             9007199254740993  →  REJECTED
+```
+
+The reason is not cosmetic. **Ruby preserves the integer/decimal distinction and
+JavaScript does not**: after `JSON.parse`, in JavaScript `1.0` and `1` are the
+same value, and nothing can tell them apart. Measured between the two reference
+implementations on 2026-08-10, before this rule:
+
+```
+{"v":1.0}    Ruby → {"v":1.0}      JS → {"v":1}
+{"v":1e3}    Ruby → {"v":1000.0}   JS → {"v":1000}
+{"v":-0.0}   Ruby → {"v":-0.0}     JS → {"v":0}
+```
+
+Different bytes are different signatures: **an envelope emitted in Ruby with
+`1.0` inside would not verify in JavaScript.** The bug was live, and hidden only
+because every test vector used integers.
+
+Normalizing is the one thing both can do — JavaScript already lands on `1`, so
+everyone else must land there too. What cannot be normalized is rejected on both
+sides, which beats signing something the other end cannot reproduce.
+
+**The 2^53−1 ceiling** is where JavaScript stops reading integers without
+rounding: `JSON.parse("9007199254740993")` returns `…992`. An envelope above that
+value would produce different signatures with nothing to warn you.
+
+> **If you need decimals, encode in the smallest unit** — cents rather than
+> dollars — **or as a string.** That is what financial systems do, and for this
+> reason: binary floats are a bad idea for legal evidence, because `0.1 + 0.2`
+> is not `0.3` anywhere.
+>
+> Adopting ECMAScript number serialization (what JCS does) was rejected because
+> it is hard to implement correctly in every language — exactly the barrier this
+> format claims not to want — and it does not fix the underlying problem.
+
+No envelope emitted before this rule contains decimals, so it **invalidates no
+existing signature**.
+
 ## 4. Signature
 
 - **Algorithm:** Ed25519 (`algo: "ed25519"`).

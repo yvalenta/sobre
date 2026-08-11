@@ -317,6 +317,57 @@ end
 #
 # Traducir una spec agrega un segundo lugar donde desincronizarse; esto es la
 # guarda que esa decisión exigía.
+# ── Numeros: el bug de interoperabilidad del 2026-08-10 ────────────────────
+#
+# Ruby conserva la distincion entero/decimal y JavaScript no: despues del parse,
+# en JS `1.0` y `1` son el mismo valor. Antes de esto, Ruby emitia `1.0` donde JS
+# emitia `1` — bytes distintos, firmas distintas, y un sobre emitido en Ruby NO
+# verificaba contra un verificador en JS. Estaba escondido porque todos los
+# vectores usaban enteros.
+#
+# La regla: si el numero VALE un entero se emite como entero; un decimal de
+# verdad se rechaza. Es lo unico que las dos implementaciones pueden cumplir.
+puts "\nnumeros interoperables"
+
+prueba("un entero disfrazado de decimal se normaliza") do
+  # 1.0, 1e3 y -0.0 son lo que JS ya produce; Ruby tiene que llegar al mismo lado.
+  Sobre.bytes_canonicos({ "v" => 1.0 }) == '{"v":1}' &&
+    Sobre.bytes_canonicos({ "v" => 1e3 }) == '{"v":1000}' &&
+    Sobre.bytes_canonicos({ "v" => -0.0 }) == '{"v":0}'
+end
+
+prueba("un decimal de verdad se RECHAZA en vez de firmarse") do
+  # Firmar algo que el otro lado no puede reproducir es peor que no firmar.
+  [0.1, 100.5, 3.14159].all? do |f|
+    Sobre.bytes_canonicos({ "v" => f })
+    false
+  rescue Sobre::ErrorDeCanonicalizacion
+    true
+  end
+end
+
+prueba("un entero sobre 2^53-1 se RECHAZA") do
+  # JavaScript no puede leerlo sin redondear: JSON.parse("9007199254740993")
+  # devuelve ...992. La firma dejaria de coincidir sin que nada avise.
+  Sobre.bytes_canonicos({ "v" => 9_007_199_254_740_993 })
+  false
+rescue Sobre::ErrorDeCanonicalizacion
+  true
+end
+
+prueba("el ultimo entero seguro SI pasa") do
+  # El borde exacto importa: uno menos y estariamos rechazando cosas validas.
+  Sobre.bytes_canonicos({ "v" => 9_007_199_254_740_991 }) == '{"v":9007199254740991}'
+end
+
+prueba("el rechazo ocurre tambien anidado, no solo en la raiz") do
+  # Un decimal escondido en un array adentro de un objeto tiene que doler igual.
+  Sobre.bytes_canonicos({ "a" => { "b" => [1, { "c" => 0.5 }] } })
+  false
+rescue Sobre::ErrorDeCanonicalizacion
+  true
+end
+
 puts "\nlas specs contra los vectores"
 
 CANONICO = File.read(File.join(VEC, "canonico.txt"), encoding: "UTF-8")

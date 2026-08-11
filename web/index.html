@@ -381,8 +381,23 @@ function compararUtf8(a, b) {
   return A.length - B.length;
 }
 
+/* Números (spec §3.2). Un número que VALE un entero se emite como entero, y un
+   decimal de verdad o un entero sobre 2^53-1 se rechazan. Sale de que Ruby
+   conserva la distinción entero/decimal y JavaScript no: sin esta regla, un
+   sobre firmado en Ruby con 1.0 adentro no verificaba acá. */
+function numeroSeguro(n) {
+  if (!Number.isInteger(n)) {
+    throw new Error(`decimal no representable de forma interoperable: ${n}`);
+  }
+  if (Math.abs(n) > Number.MAX_SAFE_INTEGER) {
+    throw new Error(`entero fuera del rango seguro (|n| > 2^53-1): ${n}`);
+  }
+  return n;
+}
+
 function serializar(v) {
   if (v === null || v === undefined) return "null";
+  if (typeof v === "number") return JSON.stringify(numeroSeguro(v));
   if (Array.isArray(v)) return "[" + v.map(serializar).join(",") + "]";
   if (typeof v === "object") {
     const claves = Object.keys(v)

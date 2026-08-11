@@ -97,6 +97,43 @@ def probar_canonicalizador(cmd)
       [false, diagnostico(obtenido, esperado)]
     end
   end
+
+  # ── Números ────────────────────────────────────────────────────────────────
+  #
+  # Los vectores son de enteros chicos y no ejercitan esto, igual que antes no
+  # ejercitaban las trampas de unicode. Estos casos van sueltos y no como
+  # vector porque la mitad se comprueba por RECHAZO, y un vector solo sabe
+  # afirmar bytes.
+  #
+  # La regla (§3.2): si el número vale un entero se emite como entero; un
+  # decimal de verdad y un entero sobre 2^53-1 se rechazan. Sale de que Ruby
+  # conserva la distinción entero/decimal y JavaScript no.
+  { '{"v":1.0}' => '{"v":1}',
+    '{"v":1e3}' => '{"v":1000}',
+    '{"v":-0.0}' => '{"v":0}' }.each do |entrada, esperado|
+    prueba("normaliza el entero disfrazado de decimal: #{entrada}") do
+      obtenido, ok = correr(cmd, entrada)
+      obtenido = obtenido.to_s.sub(/\n\z/, "")
+      next [false, "el comando falló"] unless ok
+      next [true, nil] if obtenido == esperado
+
+      [false, "esperado #{esperado} · obtenido #{obtenido}. Si tu lenguaje distingue " \
+              "entero de decimal (Ruby, Python), normalizá: JavaScript ya llega a " \
+              "#{esperado} y la firma tiene que coincidir con la suya"]
+    end
+  end
+
+  { '{"v":0.1}' => "un decimal de verdad",
+    '{"v":9007199254740993}' => "un entero sobre 2^53-1" }.each do |entrada, que|
+    prueba("RECHAZA #{que}: #{entrada}") do
+      _salida, ok = correr(cmd, entrada)
+      next [true, nil] unless ok
+
+      [false, "lo canonicalizó en vez de rechazarlo. Firmar algo que el otro lado " \
+              "no puede reproducir es peor que no firmar: JavaScript no puede leer " \
+              "ese número sin perderlo, así que la firma no sería interoperable"]
+    end
+  end
 end
 
 # Las dos causas que aparecen SIEMPRE, y las dos son de JavaScript. Nombrarlas

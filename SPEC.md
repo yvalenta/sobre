@@ -146,6 +146,53 @@ viejas. Es una decisión de compatibilidad hacia adelante, no un descuido.
 
 ---
 
+### 3.2 Números — enteros, y por qué
+
+**Un número que vale un entero se emite como entero. Un decimal de verdad, o un
+entero mayor a 2^53−1, se RECHAZAN.**
+
+```
+1.0    →  1          -0.0  →  0        (enteros disfrazados: se normalizan)
+1e3    →  1000
+0.1    →  RECHAZADO             9007199254740993  →  RECHAZADO
+```
+
+El motivo no es estético. **Ruby conserva la distinción entero/decimal y
+JavaScript no**: después de `JSON.parse`, en JavaScript `1.0` y `1` son el mismo
+valor, y no hay forma de distinguirlos. Medido entre las dos implementaciones de
+referencia el 2026-08-10, antes de esta regla:
+
+```
+{"v":1.0}    Ruby → {"v":1.0}      JS → {"v":1}
+{"v":1e3}    Ruby → {"v":1000.0}   JS → {"v":1000}
+{"v":-0.0}   Ruby → {"v":-0.0}     JS → {"v":0}
+```
+
+Bytes distintos son firmas distintas: **un sobre emitido en Ruby con `1.0`
+adentro no verificaba en JavaScript.** El bug estaba vivo y escondido solo
+porque todos los vectores usaban enteros.
+
+Normalizar es lo único que las dos pueden cumplir — JavaScript ya llega a `1`,
+así que el resto tiene que llegar ahí también. Y lo que no se puede normalizar
+se rechaza en los dos lados, que es mejor que firmar algo que el otro no puede
+reproducir.
+
+**El techo de 2^53−1** es donde JavaScript deja de leer enteros sin redondear:
+`JSON.parse("9007199254740993")` devuelve `…992`. Un sobre por encima de ese
+valor tendría firmas distintas sin que nada avisara.
+
+> **Si necesitás decimales, codificá en la unidad mínima** —centavos en vez de
+> pesos— **o como string.** Es lo que hacen los sistemas financieros, y por esta
+> razón: un binario flotante es mala idea para evidencia legal, porque
+> `0.1 + 0.2` no da `0.3` en ninguna parte.
+>
+> Se descartó adoptar la serialización de ECMAScript (lo que hace JCS) porque es
+> difícil de implementar bien en cada lenguaje — justo la barrera que este
+> formato dice no querer poner — y no arregla el problema de fondo.
+
+Ningún sobre emitido antes de esta regla trae decimales, así que **no invalida
+una sola firma existente**.
+
 ## 4. Firma
 
 - **Algoritmo:** Ed25519 (`algo: "ed25519"`).
