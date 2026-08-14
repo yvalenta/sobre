@@ -134,6 +134,15 @@ del servidor, no para el usuario):
 3. **`Content-Type: application/json`** — hay navegadores y proxies que
    reescriben lo que creen texto.
 
+> **Ojo con el diagnóstico, que se paga caro.** Ante un `?url=` que falla, el
+> navegador entrega un `Failed to fetch` **sin causa**: CORS, DNS inexistente,
+> TLS y servidor caído se ven idénticos desde el JavaScript. Un verificador que
+> traduce eso a *«suele ser CORS»* acierta seguido y **manda a arreglar lo que
+> no está roto** el resto de las veces. Medido el 2026-08-14: el documento aún
+> no tenía DNS y el mensaje apuntó a CORS. Si servís un verificador, decí «no
+> se pudo descargar» y listá las causas posibles; si estás depurando uno,
+> comprobá primero que el nombre resuelva.
+
 ---
 
 **Enlaces:** [`SPEC.md`](SPEC.md) · [`IMPLEMENTAR.md`](IMPLEMENTAR.md) ·
