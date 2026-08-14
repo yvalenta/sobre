@@ -61,6 +61,21 @@ puede escribir mal: es criptográfica o no es.
    (En EVM el hash del ancla es keccak-256, **no** sha-256 — usar la función
    del sistema anfitrión. Confundirlas es el primer falso negativo clásico.)
 
+   **Ejemplo con el vector del repo.** Correr el comando de arriba sobre
+   [`vectores/sobre.json`](vectores/sobre.json) da, hoy y mientras el vector
+   no cambie:
+
+   ```
+   e636c7bd0fc91fc418239124b0ec365a9083efdb3704840dd5a47437ee59918d
+   ```
+
+   Ese es el número que un sistema externo anclaría (con SU función de hash).
+   Cualquiera con una copia del archivo lo re-deriva sin preguntarle nada a
+   nadie — que es la propiedad entera del patrón en una línea.
+   [`patrones_test.rb`](patrones_test.rb) fija que este número y el documento
+   sigan coincidiendo: si el vector cambia, el test truena antes de que esta
+   prosa mienta.
+
 2. **Al comparar contra el ancla, normalizar antes de comparar**: prefijo `0x`
    presente o ausente, mayúsculas contra minúsculas. El segundo falso negativo
    clásico es un hash correcto que "no coincide" por el prefijo.
