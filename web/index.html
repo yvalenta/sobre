@@ -610,11 +610,20 @@ function pintarResultado(res, nombre) {
      <p class="pie">${escapar(t("archivo"))}: <code>${escapar(nombre || t("pegado"))}</code></p>`;
 }
 
+// Lo ultimo que se cargo, para poder RE-analizarlo cuando cambia la llave.
+// Sin esto, quien llega por ?url= con un sobre de otro emisor queda en un
+// callejon: el documento se analiza al vuelo contra la llave embebida, pegar
+// la llave correcta no repinta nada, y recargar la pagina vacia el textarea.
+// Medido el 2026-08-14 con un sobre ajeno de verdad.
+let cargado = null;
+
 async function procesar(texto, nombre) {
   let doc;
   try { doc = JSON.parse(texto); }
   catch (e) { return pintarError("err_json", { msg: e.message }); }
   if (!doc || typeof doc !== "object") return pintarError("err_no_objeto");
+
+  cargado = { doc: doc, nombre: nombre };
 
   let res;
   try { res = await analizar(doc, pemActivo()); }
@@ -622,6 +631,15 @@ async function procesar(texto, nombre) {
 
   pintarResultado(res, nombre);
 }
+
+// Cambiar la llave re-analiza lo que ya esta cargado. Es lo que cualquiera
+// espera, y es ademas el unico camino para verificar un sobre ajeno sin
+// bajarlo a mano.
+$pem.addEventListener("input", async () => {
+  if (!cargado) return;
+  try { pintarResultado(await analizar(cargado.doc, pemActivo()), cargado.nombre); }
+  catch (e) { pintarError("err_verificando", { msg: e.message }); }
+});
 
 function leer(file) {
   const r = new FileReader();
