@@ -58,6 +58,36 @@ Que `firmado_sin_procedencia` tenga estado propio y no sea un fallo es
 deliberado: es el más común en la práctica y el que más se confunde con
 «verificado».
 
+## Emitir uno
+
+No hay nada que instalar ni registrar: una llave, un comando, y publicar la
+llave pública.
+
+```bash
+# 1. La llave, una sola vez (la privada no sale nunca de tu máquina)
+openssl genpkey -algorithm ed25519 -out privada.pem
+openssl pkey -in privada.pem -pubout -out publica.pem
+
+# 2. Firmar tu salida
+ruby sobre.rb firmar salida.json --llave-privada privada.pem > sobre.json
+
+# 3. Publicar la llave pública en un endpoint estable (§5 de la spec):
+#    { "algo": "ed25519", "publicKeyId": "…", "publicKeyPem": "…" }
+ruby sobre.rb llave-id publica.pem   # el id que declara ese endpoint
+
+# 4. Desde acá, cualquiera verifica sin hablar con vos:
+ruby sobre.rb verificar sobre.json --llave publica.pem
+```
+
+Si `firmar` avisa `firmado_sin_procedencia`, tu salida aún no lleva
+`reglasHash`, `reglasVerificadasAl` o `habeasData` — firma auténtica,
+procedencia incompleta (§6). En Node es la misma superficie: `firmar`, `analizar` y `veredicto` en
+[`sobre.mjs`](sobre.mjs).
+
+**Para montarlo en sistemas que ya existen** —un hash anclado on-chain, el
+envelope de un marketplace, verificación de un clic— ver
+[`PATRONES.md`](PATRONES.md).
+
 ## Implementarlo en otro lenguaje
 
 **La guía completa está en [`IMPLEMENTAR.md`](IMPLEMENTAR.md)** — el contrato
