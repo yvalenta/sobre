@@ -213,6 +213,8 @@ const I18N = {
     v_firmado_d: "The signature is authentic, but what to check it against is missing. It proves who said it, not that it is correct.",
     v_invalido_t: "INVALID",
     v_invalido_d: "Do not trust this output. Review the points flagged below.",
+    v_otra_llave_t: "SIGNED BY ANOTHER ISSUER",
+    v_otra_llave_d: "This envelope declares a different key than the one used here, so its signature could not be checked. Paste the issuer's public key below to judge it. Nothing here says the output is wrong \u2014 only that the key to judge it is missing.",
 
     err_titulo: "COULD NOT READ",
     err_json: "The file is not valid JSON. {msg}",
@@ -271,6 +273,8 @@ const I18N = {
     v_firmado_d: "La firma es auténtica, pero falta contra qué comprobarla. Prueba quién lo dijo, no que sea correcto.",
     v_invalido_t: "INVÁLIDO",
     v_invalido_d: "No confiar en esta salida. Revisá los puntos marcados abajo.",
+    v_otra_llave_t: "FIRMADO POR OTRO EMISOR",
+    v_otra_llave_d: "Este sobre declara una llave distinta de la que se está usando, así que su firma no se pudo comprobar. Pegá abajo la llave pública del emisor para poder juzgarlo. Nada de esto dice que la salida sea incorrecta \u2014 solo que falta la llave con la que juzgarla.",
 
     err_titulo: "NO SE PUDO LEER",
     err_json: "El archivo no es JSON válido. {msg}",
@@ -595,9 +599,28 @@ function pintarError(clave, params) {
     `<p>${escapar(t(clave, params))}</p></div>`;
 }
 
+// El sobre declara CONTRA QUE LLAVE se lo debe juzgar. Si esa llave no es la
+// que se esta usando, el veredicto del formato es `invalido` —correcto: no se
+// pudo verificar— pero decirle al lector "NO CONFIES EN ESTA SALIDA" seria
+// afirmar algo que nadie midio. Lo unico medido es que falta la llave del
+// emisor. Presentarlo como fraude es el mismo pecado que traducir un
+// `Failed to fetch` a "suele ser CORS": una causa inventada que manda a la
+// conclusion equivocada — y aca la equivocada es "este emisor publica basura".
+//
+// El FORMATO no cambia: sigue habiendo tres veredictos (SPEC §6). Cambia como
+// se cuenta este caso, que es el mas comun al verificar un sobre ajeno.
+function esOtraLlave(res) {
+  const check = (id) => res.checks.find((c) => c.id === id);
+  return res.veredicto === "invalido" &&
+         check("firma_presente")?.ok === true &&
+         check("llave_declarada")?.ok === false;
+}
+
 function pintarResultado(res, nombre) {
   ultimo = { tipo: "resultado", res, nombre };
-  const [clase, claveTitulo, claveDesc] = VEREDICTOS[res.veredicto];
+  const [clase, claveTitulo, claveDesc] = esOtraLlave(res)
+    ? ["v-tibio", "v_otra_llave_t", "v_otra_llave_d"]
+    : VEREDICTOS[res.veredicto];
   const filas = res.checks.map((c) => {
     const marca = c.ok ? ["m-ok", "✓"] : c.critico ? ["m-mal", "✕"] : ["m-falta", "!"];
     return `<li><div class="marca ${marca[0]}">${marca[1]}</div>
