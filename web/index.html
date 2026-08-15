@@ -234,6 +234,7 @@ const I18N = {
     c_llave_legible_no: "the public key could not be parsed",
     c_firma_verifica_ok: "Ed25519 verifies over the canonical JSON",
     c_firma_verifica_no: "THE SIGNATURE DOES NOT VERIFY",
+    c_firma_sin_llave: "not checked: the issuer's public key is missing here",
     c_llave_declarada_ok: "publicKeyId {id} matches the key used",
     c_llave_declarada_no: "the envelope says {declarado} but you verified with {real}",
     c_detecta_ok: "altering a value invalidates the signature",
@@ -294,6 +295,7 @@ const I18N = {
     c_llave_legible_no: "la llave pública no se pudo interpretar",
     c_firma_verifica_ok: "Ed25519 verifica sobre el JSON canónico",
     c_firma_verifica_no: "LA FIRMA NO VERIFICA",
+    c_firma_sin_llave: "sin comprobar: falta acá la llave pública del emisor",
     c_llave_declarada_ok: "publicKeyId {id} coincide con la llave usada",
     c_llave_declarada_no: "el sobre dice {declarado} pero verificaste con {real}",
     c_detecta_ok: "alterar un valor invalida la firma",
@@ -621,10 +623,21 @@ function pintarResultado(res, nombre) {
   const [clase, claveTitulo, claveDesc] = esOtraLlave(res)
     ? ["v-tibio", "v_otra_llave_t", "v_otra_llave_d"]
     : VEREDICTOS[res.veredicto];
+  // Con el titular ya honesto, el DETALLE no puede seguir contando la historia
+  // vieja: dos cruces rojas y un "LA FIRMA NO VERIFICA" en mayusculas dejan al
+  // lector con la impresion contraria a la que el titular acaba de dar. Cuando
+  // falta la llave del emisor, esas dos filas son "no se pudo comprobar", que
+  // es lo unico medido — se pintan tibias, no rojas.
+  const otraLlave = esOtraLlave(res);
   const filas = res.checks.map((c) => {
-    const marca = c.ok ? ["m-ok", "✓"] : c.critico ? ["m-mal", "✕"] : ["m-falta", "!"];
+    const sinJuzgar = otraLlave && (c.id === "firma_verifica" || c.id === "llave_declarada");
+    const marca = c.ok ? ["m-ok", "✓"]
+                : sinJuzgar ? ["m-falta", "!"]
+                : c.critico ? ["m-mal", "✕"] : ["m-falta", "!"];
+    const detalle = (sinJuzgar && c.id === "firma_verifica")
+      ? t("c_firma_sin_llave") : detalleDe(c);
     return `<li><div class="marca ${marca[0]}">${marca[1]}</div>
-      <div class="cuerpo"><code>${escapar(c.id)}</code><span>${escapar(detalleDe(c))}</span></div></li>`;
+      <div class="cuerpo"><code>${escapar(c.id)}</code><span>${escapar(detalle)}</span></div></li>`;
   }).join("");
 
   $salida.innerHTML =
