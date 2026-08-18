@@ -412,6 +412,70 @@ prueba("la regla se aplica anidada, no solo en la raiz") do
   emitido && rechazado
 end
 
+puts "\nla llave traida por --llave-url"
+
+# El bug: `llave_de_url` hacia `JSON.parse` a ciegas, asi que un `.pem` servido
+# crudo moria con "invalid number: '-----BEGIN'". Lo encontro un tercero. La
+# decision de formato vive ahora en una funcion pura, y estas la interrogan sin
+# red: lo que se prueba es a que le dice que si y a que le dice que no.
+
+PEM_PUB = <<~PEM
+  -----BEGIN PUBLIC KEY-----
+  MCowBQYDK2VwAyEAGb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE=
+  -----END PUBLIC KEY-----
+PEM
+
+prueba("un PEM crudo se acepta tal cual — el bug que reporto el tercero") do
+  Sobre.pem_de_respuesta(PEM_PUB) == PEM_PUB
+end
+
+prueba("un PEM con espacios adelante tambien") do
+  # Un servidor que antepone un salto no cambia la llave, y rechazarlo seria
+  # el mismo error de forma que se acaba de arreglar.
+  Sobre.pem_de_respuesta("\n  " + PEM_PUB).include?("BEGIN PUBLIC KEY")
+end
+
+prueba("el endpoint JSON sigue andando: publicKeyPem") do
+  Sobre.pem_de_respuesta(JSON.generate({ "publicKeyPem" => PEM_PUB })) == PEM_PUB
+end
+
+prueba("y su alias `pem`") do
+  Sobre.pem_de_respuesta(JSON.generate({ "pem" => PEM_PUB })) == PEM_PUB
+end
+
+prueba("una llave PRIVADA servida por HTTP se RECHAZA") do
+  # Si pasara, verificar daria verde igual —de una privada Ed25519 sale su
+  # publica— y nadie se enteraria de que el emisor esta publicando el secreto.
+  # El unico modo de falla que este arreglo podia introducir.
+  privada = "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIA==\n-----END PRIVATE KEY-----\n"
+  begin
+    Sobre.pem_de_respuesta(privada)
+    false
+  rescue StandardError => e
+    e.message.include?("PRIVADA")
+  end
+end
+
+prueba("un JSON sin la llave lo dice, y no devuelve nil") do
+  begin
+    Sobre.pem_de_respuesta(JSON.generate({ "otra" => "cosa" }))
+    false
+  rescue StandardError => e
+    e.message.include?("publicKeyPem")
+  end
+end
+
+prueba("una pagina HTML no se confunde con una llave") do
+  # El caso real de apuntar el flag a la URL equivocada: tiene que nombrar las
+  # dos formas que si acepta, no hablar del parser de JSON.
+  begin
+    Sobre.pem_de_respuesta("<!doctype html><title>404</title>")
+    false
+  rescue StandardError => e
+    e.message.include?("PEM") && e.message.include?("publicKeyPem")
+  end
+end
+
 puts "\nlas specs contra los vectores"
 
 CANONICO = File.read(File.join(VEC, "canonico.txt"), encoding: "UTF-8")

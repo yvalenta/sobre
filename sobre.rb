@@ -21,6 +21,7 @@
 # la canonicalizacion vive en un solo lugar y no puede derivar entre las dos.
 #
 #   ruby sobre.rb verificar <sobre.json> --llave-url https://host/publickey
+#   ruby sobre.rb verificar <sobre.json> --llave-url https://host/publica.pem
 #   ruby sobre.rb verificar <sobre.json> --llave llave.pem
 #   ruby sobre.rb llave-id llave.pem
 #
@@ -356,6 +357,40 @@ module Sobre
     %w[reglasHash reglasVerificadasAl habeasData].reject { |c| doc.key?(c) }
   end
 
+  # Las DOS formas en que un emisor sirve su llave publica, porque las dos
+  # existen: un endpoint JSON (`{"publicKeyPem": "..."}`, que es lo que sirve
+  # NomiCheck) y un `.pem` crudo (que es lo que sirve nagual).
+  #
+  # Hasta el 2026-08-18 esto hacia `JSON.parse` a ciegas, asi que apuntarlo a un
+  # PEM servido tal cual moria con `invalid number: '-----BEGIN'`: un error que
+  # habla del parser y no del problema, y que manda a buscar la falla al lado
+  # equivocado —al documento, o a la URL— cuando lo unico que pasaba es que esta
+  # funcion conocia un solo formato. Lo encontro un tercero tratando de
+  # verificar un sobre nuestro, que es exactamente para quien existe el flag.
+  #
+  # Decide por el CONTENIDO y no por el `Content-Type`: la cabecera la escribe
+  # quien sirve y puede estar mal; los bytes son los que se van a usar.
+  def self.pem_de_respuesta(cuerpo)
+    texto = cuerpo.to_s
+    unless texto.lstrip.start_with?("-----BEGIN")
+      json = begin
+        JSON.parse(texto)
+      rescue JSON::ParserError
+        raise "la respuesta no es un PEM ni un JSON con publicKeyPem"
+      end
+      return json["publicKeyPem"] || json["pem"] ||
+             raise("la respuesta no trae publicKeyPem")
+    end
+
+    # Una llave PRIVADA servida por HTTP no se puede tramitar en silencio.
+    # Verificar "funcionaria" igual —de una privada Ed25519 sale su publica—,
+    # asi que el operador tendria un verde y ninguna senal de que su emisor
+    # esta publicando el secreto. Falla cerrado y lo dice.
+    raise "la URL sirve una llave PRIVADA, no una publica" if texto.include?("PRIVATE KEY")
+
+    texto
+  end
+
   def self.llave_de_url(url)
     uri = URI(url)
     res = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https",
@@ -366,8 +401,7 @@ module Sobre
     end
     raise "HTTP #{res.code} al pedir la llave" unless res.code.to_i == 200
 
-    cuerpo = JSON.parse(res.body)
-    cuerpo["publicKeyPem"] || cuerpo["pem"] or raise "la respuesta no trae publicKeyPem"
+    pem_de_respuesta(res.body)
   end
 end
 
@@ -381,6 +415,9 @@ if __FILE__ == $PROGRAM_NAME
         ruby sobre.rb verificar <sobre.json> [--llave a.pem | --llave-url URL] [--json]
         ruby sobre.rb firmar <documento.json> --llave-privada <llave.pem>
         ruby sobre.rb llave-id <llave.pem>
+
+      `--llave-url` acepta las dos formas de servir una llave: un endpoint JSON
+      (`{"publicKeyPem": "..."}`) o un `.pem` crudo.
 
       `-` en vez del archivo lee de la entrada estandar:
 
