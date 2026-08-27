@@ -1,0 +1,25 @@
+# La puerta del código: las tres suites (sobre, patrones, conformidad) corren
+# en el runner de GitHub en cada push. El runner trae node, así que los
+# vectores cruzados contra sobre.mjs también tienen con qué correr.
+name: pruebas
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+
+      - name: suites (una por una, como en la casa)
+        run: |
+          for t in *_test.rb; do
+            echo "== $t"
+            ruby "$t"
+          done
